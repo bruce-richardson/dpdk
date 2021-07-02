@@ -1,0 +1,32 @@
+EXPERIMENTAL {
+	global:
+
+	rte_dmadev_count;
+	rte_dmadev_get_dev_id;
+	rte_dmadev_socket_id;
+	rte_dmadev_info_get;
+	rte_dmadev_configure;
+	rte_dmadev_start;
+	rte_dmadev_stop;
+	rte_dmadev_close;
+	rte_dmadev_reset;
+	rte_dmadev_queue_setup;
+	rte_dmadev_queue_release;
+	rte_dmadev_queue_info_get;
+	rte_dmadev_copy;
+	rte_dmadev_copy_sg;
+	rte_dmadev_fill;
+	rte_dmadev_fill_sg;
+	rte_dmadev_fence;
+	rte_dmadev_perform;
+	rte_dmadev_completed;
+	rte_dmadev_completed_fails;
+	rte_dmadev_stats_get;
+	rte_dmadev_stats_reset;
+	rte_dmadev_xstats_names_get;
+	rte_dmadev_xstats_get;
+	rte_dmadev_xstats_reset;
+	rte_dmadev_selftest;
+
+	local: *;
+};

@@ -496,6 +496,10 @@ F: drivers/raw/skeleton/
 F: app/test/test_rawdev.c
 F: doc/guides/prog_guide/rawdev.rst
 
+Dma device API
+M: Chengwen Feng <fengchengwen@huawei.com>
+F: lib/dmadev/
+
 
 Memory Pool Drivers
 -------------------

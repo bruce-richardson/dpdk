@@ -81,6 +81,9 @@
 /* rawdev defines */
 #define RTE_RAWDEV_MAX_DEVS 64
 
+/* dmadev defines */
+#define RTE_DMADEV_MAX_DEVS 64
+
 /* ip_fragmentation defines */
 #define RTE_LIBRTE_IP_FRAG_MAX_FRAG 4
 #undef RTE_LIBRTE_IP_FRAG_TBL_STAT

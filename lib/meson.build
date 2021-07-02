@@ -60,6 +60,7 @@ libraries = [
         'bpf',
         'graph',
         'node',
+        'dmadev',
 ]
 
 if is_windows

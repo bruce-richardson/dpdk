@@ -1,6 +1,8 @@
 EXPERIMENTAL {
 	global:
 
+	rte_dmadevices;
+	rte_dmadev_pmd_allocate;
 	rte_dmadev_count;
 	rte_dmadev_get_dev_id;
 	rte_dmadev_socket_id;
@@ -19,6 +21,7 @@ EXPERIMENTAL {
 	rte_dmadev_fill_sg;
 	rte_dmadev_fence;
 	rte_dmadev_perform;
+	rte_dmadev_pmd_release;
 	rte_dmadev_completed;
 	rte_dmadev_completed_fails;
 	rte_dmadev_stats_get;

@@ -372,6 +372,7 @@ rte_dmadev_find_free_device_index(void)
 	return RTE_DMADEV_MAX_DEVS;
 }
 
+__rte_experimental
 struct rte_dmadev *
 rte_dmadev_pmd_allocate(const char *name, size_t dev_priv_size, int socket_id)
 {
@@ -414,6 +415,7 @@ rte_dmadev_pmd_allocate(const char *name, size_t dev_priv_size, int socket_id)
 	return dev;
 }
 
+__rte_experimental
 int
 rte_dmadev_pmd_release(struct rte_dmadev *dev)
 {

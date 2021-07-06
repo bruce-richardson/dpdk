@@ -17,7 +17,7 @@
 struct rte_dmadev;
 
 typedef dma_cookie_t (*dmadev_copy_t)(struct rte_dmadev *dev, uint16_t vq_id,
-				      void *src, void *dst,
+				      rte_iova_t src, rte_iova_t dst,
 				      uint32_t length, uint64_t flags);
 /**< @internal Function used to enqueue a copy operation. */
 
@@ -27,7 +27,7 @@ typedef dma_cookie_t (*dmadev_copy_sg_t)(struct rte_dmadev *dev, uint16_t vq_id,
 /**< @internal Function used to enqueue a scatter list copy operation. */
 
 typedef dma_cookie_t (*dmadev_fill_t)(struct rte_dmadev *dev, uint16_t vq_id,
-				      uint64_t pattern, void *dst,
+				      uint64_t pattern, rte_iova_t dst,
 				      uint32_t length, uint64_t flags);
 /**< @internal Function used to enqueue a fill operation. */
 

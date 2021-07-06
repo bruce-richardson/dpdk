@@ -133,8 +133,8 @@ typedef int32_t dma_cookie_t;
  * dma_scatterlist - can hold scatter DMA operation request
  */
 struct dma_scatterlist {
-	void *src;
-	void *dst;
+	rte_iova_t src;
+	rte_iova_t dst;
 	uint32_t length;
 };
 
@@ -505,7 +505,7 @@ rte_dmadev_queue_info_get(uint16_t dev_id, uint16_t vq_id,
  */
 __rte_experimental
 static inline dma_cookie_t
-rte_dmadev_copy(uint16_t dev_id, uint16_t vq_id, void *src, void *dst,
+rte_dmadev_copy(uint16_t dev_id, uint16_t vq_id, rte_iova_t src, rte_iova_t dst,
 		uint32_t length, uint64_t flags)
 {
 	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
@@ -579,7 +579,7 @@ rte_dmadev_copy_sg(uint16_t dev_id, uint16_t vq_id,
 __rte_experimental
 static inline dma_cookie_t
 rte_dmadev_fill(uint16_t dev_id, uint16_t vq_id, uint64_t pattern,
-		void *dst, uint32_t length, uint64_t flags)
+		rte_iova_t dst, uint32_t length, uint64_t flags)
 {
 	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
 	return (*dev->fill)(dev, vq_id, pattern, dst, length, flags);

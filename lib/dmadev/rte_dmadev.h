@@ -698,9 +698,11 @@ rte_dmadev_perform(uint16_t dev_id, uint16_t vq_id)
  * @param nb_cpls
  *   The maximum number of completed operations that can be processed.
  * @param[out] last_idx
- *   The last completed operation's index, as returned when entry was enqueued
+ *   The last completed operation's index, as returned when entry was enqueued.
+ *   If not required, NULL can be passed in.
  * @param[out] has_error
  *   Indicates if there are transfer error.
+ *   If not required, may be passed as NULL.
  *
  * @return
  *   The number of operations that successful completed.
@@ -714,7 +716,20 @@ rte_dmadev_completed(uint16_t dev_id, uint16_t vq_id, const uint16_t nb_cpls,
 		     uint16_t *last_idx, bool *has_error)
 {
 	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
-	has_error = false;
+	bool err = false;
+	uint16_t idx;
+
+	/* ensure the pointer values are non-null to simplify drivers.
+	 * In most cases these should be compile time evaluated, since this is an inline function.
+	 * - If NULL is explicitly passed as parameter, then compiler knows the value is NULL
+	 * - If address of local variable is passed as parameter, then compiler can
+	 *   know it's non-NULL.
+	 */
+	if (has_error == NULL)
+		has_error = &err;
+	if (last_idx == NULL)
+		last_idx = &idx;
+
 	return (*dev->completed)(dev, vq_id, nb_cpls, last_idx, has_error);
 }
 

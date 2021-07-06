@@ -282,69 +282,6 @@ rte_dmadev_stats_reset(uint16_t dev_id, int vq_id)
 	return (*dev->dev_ops->stats_reset)(dev, vq_id);
 }
 
-static int
-xstats_get_count(uint16_t dev_id)
-{
-	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
-
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->xstats_get_names, -ENOTSUP);
-
-	return (*dev->dev_ops->xstats_get_names)(dev, NULL, 0);
-}
-
-int
-rte_dmadev_xstats_names_get(uint16_t dev_id,
-			    struct rte_dmadev_xstats_name *xstats_names,
-			    uint32_t size)
-{
-	struct rte_dmadev *dev;
-	int cnt_expected_entries;
-
-	RTE_DMADEV_VALID_DEVID_OR_ERR_RET(dev_id, -EINVAL);
-
-	cnt_expected_entries = xstats_get_count(dev_id);
-
-	if (xstats_names == NULL || cnt_expected_entries < 0 ||
-	    (int)size < cnt_expected_entries || size == 0)
-		return cnt_expected_entries;
-
-	dev = &rte_dmadevices[dev_id];
-
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->xstats_get_names, -ENOTSUP);
-	return (*dev->dev_ops->xstats_get_names)(dev, xstats_names, size);
-}
-
-int
-rte_dmadev_xstats_get(uint16_t dev_id, const uint32_t ids[],
-		      uint64_t values[], uint32_t n)
-{
-	struct rte_dmadev *dev;
-
-	RTE_DMADEV_VALID_DEVID_OR_ERR_RET(dev_id, -EINVAL);
-	RTE_FUNC_PTR_OR_ERR_RET(ids, -EINVAL);
-	RTE_FUNC_PTR_OR_ERR_RET(values, -EINVAL);
-
-	dev = &rte_dmadevices[dev_id];
-
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->xstats_get, -ENOTSUP);
-
-	return (*dev->dev_ops->xstats_get)(dev, ids, values, n);
-}
-
-int
-rte_dmadev_xstats_reset(uint16_t dev_id, const uint32_t ids[], uint32_t nb_ids)
-{
-	struct rte_dmadev *dev;
-
-	RTE_DMADEV_VALID_DEVID_OR_ERR_RET(dev_id, -EINVAL);
-
-	dev = &rte_dmadevices[dev_id];
-
-	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->xstats_reset, -ENOTSUP);
-
-	return (*dev->dev_ops->xstats_reset)(dev, ids, nb_ids);
-}
-
 int
 rte_dmadev_dump(uint16_t dev_id, FILE *f)
 {

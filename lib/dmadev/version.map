@@ -27,9 +27,6 @@ EXPERIMENTAL {
 	rte_dmadev_completed_fails;
 	rte_dmadev_stats_get;
 	rte_dmadev_stats_reset;
-	rte_dmadev_xstats_names_get;
-	rte_dmadev_xstats_get;
-	rte_dmadev_xstats_reset;
 	rte_dmadev_selftest;
 
 	local: *;

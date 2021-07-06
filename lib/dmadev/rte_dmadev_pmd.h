@@ -120,19 +120,6 @@ typedef int (*dmadev_stats_get_t)(struct rte_dmadev *dev, int vq_id,
 typedef int (*dmadev_stats_reset_t)(struct rte_dmadev *dev, int vq_id);
 /**< @internal Function used to reset basic statistics. */
 
-typedef int (*dmadev_xstats_get_names_t)(const struct rte_dmadev *dev,
-		struct rte_dmadev_xstats_name *xstats_names,
-		uint32_t size);
-/**< @internal Function used to get names of extended stats. */
-
-typedef int (*dmadev_xstats_get_t)(const struct rte_dmadev *dev,
-		const uint32_t ids[], uint64_t values[], uint32_t n);
-/**< @internal Function used to retrieve extended stats. */
-
-typedef int (*dmadev_xstats_reset_t)(struct rte_dmadev *dev,
-				     const uint32_t ids[], uint32_t nb_ids);
-/**< @internal Function used to reset extended stats. */
-
 typedef int (*dmadev_selftest_t)(uint16_t dev_id);
 /**< @internal Function used to start dmadev selftest. */
 
@@ -164,12 +151,6 @@ struct rte_dmadev_ops {
 	dmadev_stats_get_t stats_get;
 	/**< Reset basic statistics. */
 	dmadev_stats_reset_t stats_reset;
-	/**< Get names of extended stats. */
-	dmadev_xstats_get_names_t xstats_get_names;
-	/**< Get extended statistics. */
-	dmadev_xstats_get_t xstats_get;
-	/**< Reset extended statistics values. */
-	dmadev_xstats_reset_t xstats_reset;
 
 	/**< Device selftest function */
 	dmadev_selftest_t dev_selftest;

@@ -768,14 +768,10 @@ rte_dmadev_completed_fails(uint16_t dev_id, uint16_t vq_id,
 }
 
 struct rte_dmadev_stats {
-	uint64_t enqueue_fail_count;
-	/**< Conut of all operations which failed enqueued */
-	uint64_t enqueued_count;
-	/**< Count of all operations which successful enqueued */
-	uint64_t completed_fail_count;
-	/**< Count of all operations which failed to complete */
-	uint64_t completed_count;
-	/**< Count of all operations which successful complete */
+	uint64_t enqueued_count;       /**< Count of operations which were successful enqueued */
+	uint64_t submitted_count;      /**< Count of operations which were submitted to hardware */
+	uint64_t completed_fail_count; /**< Count of operations which failed to complete */
+	uint64_t completed_count;      /**< Count of operations which successful complete */
 };
 
 /**

@@ -361,6 +361,25 @@ rte_dmadev_close(uint16_t dev_id);
  * @warning
  * @b EXPERIMENTAL: this API may change without prior notice.
  *
+ * Dump DMA device info.
+ *
+ * @param dev_id
+ *   The identifier of the device.
+ *
+ * @param f
+ *   The file to write the output to.
+ *
+ * @return
+ *   0 on success. Non-zero otherwise.
+ */
+__rte_experimental
+int
+rte_dmadev_dump(uint16_t dev_id, FILE *f);
+
+/**
+ * @warning
+ * @b EXPERIMENTAL: this API may change without prior notice.
+ *
  * Reset a DMA device.
  *
  * This is different from cycle of rte_dmadev_start->rte_dmadev_stop in the

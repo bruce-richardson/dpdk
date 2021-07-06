@@ -346,6 +346,23 @@ rte_dmadev_xstats_reset(uint16_t dev_id, const uint32_t ids[], uint32_t nb_ids)
 }
 
 int
+rte_dmadev_dump(uint16_t dev_id, FILE *f)
+{
+	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
+
+	RTE_DMADEV_VALID_DEVID_OR_ERR_RET(dev_id, -EINVAL);
+
+	fprintf(f, "DMA Dev %u, '%s' [%s]\n", dev->dev_id, dev->name,
+			dev->started ? "started" : "stopped");
+	fprintf(f, "  Driver: %s\n", dev->driver_name);
+	fprintf(f, "  Socket Id: %d\n", dev->socket_id);
+
+	if (dev->dev_ops->dump != NULL)
+		return (*dev->dev_ops->dump)(dev, f);
+	return 0;
+}
+
+int
 rte_dmadev_selftest(uint16_t dev_id)
 {
 	struct rte_dmadev *dev;

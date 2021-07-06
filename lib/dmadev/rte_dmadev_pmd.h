@@ -99,6 +99,9 @@ typedef int (*dmadev_close_t)(struct rte_dmadev *dev);
 typedef int (*dmadev_reset_t)(struct rte_dmadev *dev);
 /**< @internal Function used to reset a configured device. */
 
+typedef int (*dmadev_dump_t)(struct rte_dmadev *dev, FILE *f);
+/**< @internal Function used to dump out the state of a device for debugging. */
+
 typedef int (*dmadev_queue_setup_t)(struct rte_dmadev *dev,
 				    const struct rte_dmadev_queue_conf *conf);
 /**< @internal Function used to allocate and set up a virt queue. */
@@ -147,6 +150,8 @@ struct rte_dmadev_ops {
 	dmadev_close_t dev_close;
 	/**< Reset device. */
 	dmadev_reset_t dev_reset;
+	/**< Dump device info for debugging */
+	dmadev_dump_t dump;
 
 	/**< Allocate and set up a virt queue. */
 	dmadev_queue_setup_t queue_setup;

@@ -4,6 +4,7 @@ EXPERIMENTAL {
 	rte_dmadevices;
 	rte_dmadev_pmd_allocate;
 	rte_dmadev_count;
+	rte_dmadev_dump;
 	rte_dmadev_get_dev_id;
 	rte_dmadev_socket_id;
 	rte_dmadev_info_get;

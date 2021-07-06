@@ -16,22 +16,22 @@
 
 struct rte_dmadev;
 
-typedef dma_cookie_t (*dmadev_copy_t)(struct rte_dmadev *dev, uint16_t vq_id,
+typedef int (*dmadev_copy_t)(struct rte_dmadev *dev, uint16_t vq_id,
 				      rte_iova_t src, rte_iova_t dst,
 				      uint32_t length, uint64_t flags);
 /**< @internal Function used to enqueue a copy operation. */
 
-typedef dma_cookie_t (*dmadev_copy_sg_t)(struct rte_dmadev *dev, uint16_t vq_id,
+typedef int (*dmadev_copy_sg_t)(struct rte_dmadev *dev, uint16_t vq_id,
 					 const struct dma_scatterlist *sg,
 					 uint32_t sg_len, uint64_t flags);
 /**< @internal Function used to enqueue a scatter list copy operation. */
 
-typedef dma_cookie_t (*dmadev_fill_t)(struct rte_dmadev *dev, uint16_t vq_id,
+typedef int (*dmadev_fill_t)(struct rte_dmadev *dev, uint16_t vq_id,
 				      uint64_t pattern, rte_iova_t dst,
 				      uint32_t length, uint64_t flags);
 /**< @internal Function used to enqueue a fill operation. */
 
-typedef dma_cookie_t (*dmadev_fill_sg_t)(struct rte_dmadev *dev, uint16_t vq_id,
+typedef int (*dmadev_fill_sg_t)(struct rte_dmadev *dev, uint16_t vq_id,
 			uint64_t pattern, const struct dma_scatterlist *sg,
 			uint32_t sg_len, uint64_t flags);
 /**< @internal Function used to enqueue a scatter list fill operation. */
@@ -44,12 +44,12 @@ typedef int (*dmadev_perform_t)(struct rte_dmadev *dev, uint16_t vq_id);
 
 typedef uint16_t (*dmadev_completed_t)(struct rte_dmadev *dev, uint16_t vq_id,
 				       const uint16_t nb_cpls,
-				       dma_cookie_t *cookie, bool *has_error);
+				       uint16_t *last_idx, bool *has_error);
 /**< @internal Function used to return number of successful completed operations */
 
 typedef uint16_t (*dmadev_completed_fails_t)(struct rte_dmadev *dev,
 			uint16_t vq_id, const uint16_t nb_status,
-			uint32_t *status, dma_cookie_t *cookie);
+			uint32_t *status, uint16_t *last_idx);
 /**< @internal Function used to return number of failed completed operations */
 
 #define RTE_DMADEV_NAME_MAX_LEN	64 /**< Max length of name of DMA PMD */

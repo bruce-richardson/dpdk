@@ -107,29 +107,6 @@ extern "C" {
 #include <rte_compat.h>
 
 /**
- * dma_cookie_t - an opaque DMA cookie
- *
- * If dma_cookie_t is >=0 it's a DMA operation request cookie, <0 it's a error
- * code.
- * When using cookies, comply with the following rules:
- * a) Cookies for each virtual queue are independent.
- * b) For a virt queue, the cookie are monotonically incremented, when it reach
- *    the INT_MAX, it wraps back to zero.
- * c) The initial cookie of a virt queue is zero, after the device is stopped or
- *    reset, the virt queue's cookie needs to be reset to zero.
- * Example:
- *    step-1: start one dmadev
- *    step-2: enqueue a copy operation, the cookie return is 0
- *    step-3: enqueue a copy operation again, the cookie return is 1
- *    ...
- *    step-101: stop the dmadev
- *    step-102: start the dmadev
- *    step-103: enqueue a copy operation, the cookie return is 0
- *    ...
- */
-typedef int32_t dma_cookie_t;
-
-/**
  * dma_scatterlist - can hold scatter DMA operation request
  */
 struct dma_scatterlist {
@@ -517,13 +494,14 @@ rte_dmadev_queue_info_get(uint16_t dev_id, uint16_t vq_id,
  *   An opaque flags for this operation.
  *
  * @return
- *   dma_cookie_t: please refer to the corresponding definition.
+ *   <0 on error,
+ *   on success, index of enqueued copy job, monotonically increasing between 0..UINT16_MAX
  *
  * NOTE: The caller must ensure that the input parameter is valid and the
  *       corresponding device supports the operation.
  */
 __rte_experimental
-static inline dma_cookie_t
+static inline int
 rte_dmadev_copy(uint16_t dev_id, uint16_t vq_id, rte_iova_t src, rte_iova_t dst,
 		uint32_t length, uint64_t flags)
 {
@@ -552,13 +530,14 @@ rte_dmadev_copy(uint16_t dev_id, uint16_t vq_id, rte_iova_t src, rte_iova_t dst,
  *   An opaque flags for this operation.
  *
  * @return
- *   dma_cookie_t: please refer to the corresponding definition.
+ *   <0 on error,
+ *   on success, index of enqueued copy job, monotonically increasing between 0..UINT16_MAX
  *
  * NOTE: The caller must ensure that the input parameter is valid and the
  *       corresponding device supports the operation.
  */
 __rte_experimental
-static inline dma_cookie_t
+static inline int
 rte_dmadev_copy_sg(uint16_t dev_id, uint16_t vq_id,
 		   const struct dma_scatterlist *sg,
 		   uint32_t sg_len, uint64_t flags)
@@ -590,13 +569,14 @@ rte_dmadev_copy_sg(uint16_t dev_id, uint16_t vq_id,
  *   An opaque flags for this operation.
  *
  * @return
- *   dma_cookie_t: please refer to the corresponding definition.
+ *   <0 on error,
+ *   on success, index of enqueued copy job, monotonically increasing between 0..UINT16_MAX
  *
  * NOTE: The caller must ensure that the input parameter is valid and the
  *       corresponding device supports the operation.
  */
 __rte_experimental
-static inline dma_cookie_t
+static inline int
 rte_dmadev_fill(uint16_t dev_id, uint16_t vq_id, uint64_t pattern,
 		rte_iova_t dst, uint32_t length, uint64_t flags)
 {
@@ -627,13 +607,14 @@ rte_dmadev_fill(uint16_t dev_id, uint16_t vq_id, uint64_t pattern,
  *   An opaque flags for this operation.
  *
  * @return
- *   dma_cookie_t: please refer to the corresponding definition.
+ *   <0 on error,
+ *   on success, index of enqueued copy job, monotonically increasing between 0..UINT16_MAX
  *
  * NOTE: The caller must ensure that the input parameter is valid and the
  *       corresponding device supports the operation.
  */
 __rte_experimental
-static inline dma_cookie_t
+static inline int
 rte_dmadev_fill_sg(uint16_t dev_id, uint16_t vq_id, uint64_t pattern,
 		   const struct dma_scatterlist *sg, uint32_t sg_len,
 		   uint64_t flags)
@@ -716,8 +697,8 @@ rte_dmadev_perform(uint16_t dev_id, uint16_t vq_id)
  *   The identifier of virt queue.
  * @param nb_cpls
  *   The maximum number of completed operations that can be processed.
- * @param[out] cookie
- *   The last completed operation's cookie.
+ * @param[out] last_idx
+ *   The last completed operation's index, as returned when entry was enqueued
  * @param[out] has_error
  *   Indicates if there are transfer error.
  *
@@ -730,11 +711,11 @@ rte_dmadev_perform(uint16_t dev_id, uint16_t vq_id)
 __rte_experimental
 static inline uint16_t
 rte_dmadev_completed(uint16_t dev_id, uint16_t vq_id, const uint16_t nb_cpls,
-		     dma_cookie_t *cookie, bool *has_error)
+		     uint16_t *last_idx, bool *has_error)
 {
 	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
 	has_error = false;
-	return (*dev->completed)(dev, vq_id, nb_cpls, cookie, has_error);
+	return (*dev->completed)(dev, vq_id, nb_cpls, last_idx, has_error);
 }
 
 /**
@@ -752,8 +733,8 @@ rte_dmadev_completed(uint16_t dev_id, uint16_t vq_id, const uint16_t nb_cpls,
  *   Indicates the size of status array.
  * @param[out] status
  *   The error code of operations that failed to complete.
- * @param[out] cookie
- *   The last failed completed operation's cookie.
+ * @param[out] last_idx
+ *   The last failed completed operation's index.
  *
  * @return
  *   The number of operations that failed to complete.
@@ -765,10 +746,10 @@ __rte_experimental
 static inline uint16_t
 rte_dmadev_completed_fails(uint16_t dev_id, uint16_t vq_id,
 			   const uint16_t nb_status, uint32_t *status,
-			   dma_cookie_t *cookie)
+			   uint16_t *last_idx)
 {
 	struct rte_dmadev *dev = &rte_dmadevices[dev_id];
-	return (*dev->completed_fails)(dev, vq_id, nb_status, status, cookie);
+	return (*dev->completed_fails)(dev, vq_id, nb_status, status, last_idx);
 }
 
 struct rte_dmadev_stats {

@@ -114,6 +114,9 @@ configure_file(output: build_cfg,
 # build pkg-config files for dpdk
 subdir('buildtools/pkg-config')
 
+# output a list of cargo parameters if DPDK is being built for rust use
+run_command([gen_cargo_bindgen_info, pkgconf], check: true)
+
 if meson.is_subproject()
     subdir('buildtools/subproject')
 endif

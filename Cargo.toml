@@ -1,0 +1,13 @@
+[package]
+name = "dpdk-c"
+version = "25.0.7"
+build = "buildtools/rust/build.rs"
+edition = "2021"
+
+[lib]
+path = "buildtools/rust/lib.rs"
+doctest = false
+
+[build-dependencies]
+bindgen = "0.71"
+meson-next = "1"

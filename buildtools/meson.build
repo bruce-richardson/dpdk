@@ -26,6 +26,7 @@ header_gen_cmd = py3 + files('gen-header.py')
 has_hugepages_cmd = py3 + files('has-hugepages.py')
 cmdline_gen_cmd = py3 + files('dpdk-cmdline-gen.py')
 check_dts_requirements = py3 + files('check-dts-requirements.py')
+gen_cargo_bindgen_info = py3 + files('rust/gen-cargo-bindgen-info.py')
 
 # install any build tools that end-users might want also
 install_data([

@@ -114,6 +114,8 @@ configure_file(output: build_cfg,
 
 # build pkg-config files for dpdk
 subdir('buildtools/pkg-config')
+# build the rust bindings if possible
+subdir('buildtools/rust')
 
 if meson.is_subproject()
     subdir('buildtools/subproject')

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright(c) 2025 Intel Corporation
+
+[package]
+name = "dpdk-c"
+description = "Data Plane Development Kit (DPDK) low-level bindings for Rust"
+homepage = "https://dpdk.org/"
+repository = "https://github.com/DPDK/dpdk"
+version = "25.0.7"
+build = "buildtools/rust/build.rs"
+edition = "2021"
+license = "BSD-3-Clause"
+
+[lib]
+path = "buildtools/rust/lib.rs"
+doctest = false
+
+[build-dependencies]
+bindgen = "0.71"
+meson-next = "1"
+cc = "1.2.18"
+pkg-config = "0.3.32"
+
+[features]
+installed_dpdk = []

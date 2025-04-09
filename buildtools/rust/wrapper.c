@@ -2,6 +2,10 @@
  * Copyright(c) 2025 Intel Corporation
  */
 
-#include <rte_eal.h>
+#include <rte_lcore.h>
 
-unsigned int dpdk_lcore_id(void);
+unsigned int
+dpdk_lcore_id()
+{
+	return rte_lcore_id();
+}

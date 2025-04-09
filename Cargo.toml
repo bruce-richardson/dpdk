@@ -18,3 +18,4 @@ doctest = false
 [build-dependencies]
 bindgen = "0.71"
 meson-next = "1"
+cc = "1.2.18"

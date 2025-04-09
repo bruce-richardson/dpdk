@@ -50,19 +50,25 @@ fn main() {
 
     let bindgen_include_file = build_dir.join("bindgen_cflags.txt");
     let mut bindings = bindgen::Builder::default();
+    let mut cc_build = cc::Build::new();
     for line in std::fs::read_to_string(bindgen_include_file).unwrap().lines() {
             bindings = bindings.clang_arg(line);
+            cc_build = cc_build.flag(line).to_owned();
     }
 
     let bindings = bindings.header("buildtools/rust/wrapper.h")
         .derive_default(true)
         .allowlist_function("rte_eal_init")
         .allowlist_function("rte_eal_cleanup")
+        .allowlist_function("dpdk_lcore_id")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
+
+    println!("cargo:rerun-if-changed=buildtools/rust/wrapper.c");
+    cc_build.file("buildtools/rust/wrapper.c").compile("wrapper");
 
     bindings
         .write_to_file(out_path.join("bindings.rs"))

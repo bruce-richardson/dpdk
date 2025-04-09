@@ -3,9 +3,13 @@
 
 [package]
 name = "dpdk-c"
+description = "Data Plane Development Kit (DPDK) low-level bindings for Rust"
+homepage = "https://dpdk.org/"
+repository = "https://github.com/DPDK/dpdk"
 version = "25.0.7"
 build = "buildtools/rust/build.rs"
 edition = "2021"
+license = "BSD-3-Clause"
 
 [lib]
 path = "buildtools/rust/lib.rs"

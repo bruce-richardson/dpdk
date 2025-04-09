@@ -20,6 +20,7 @@ mod tests {
 		rte_eal_init(argv.len().try_into().unwrap(), argv.as_mut_ptr())
 	};
 	assert!(ret >= 0, "rte_eal_init failed");
+	assert!(unsafe { dpdk_lcore_id() } == 0, "Failed to get expected lcore id");
         unsafe { rte_eal_cleanup() };
     }
 }

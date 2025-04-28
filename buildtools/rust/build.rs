@@ -11,52 +11,62 @@ fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let build_dir = out_path.join("build");
     let pycache_dir = out_path.join("__pycache__");
-    env::set_var("PYTHONPYCACHEPREFIX", pycache_dir.to_str().unwrap());
-
-    /* enable libraries needed for physical network drivers */
-    let enable_lib_list = vec![
-        "cryptodev",
-        "security",
-        "timer",
-    ].join(",");
-    /* disable unsupported driver classes */
-    let disable_driver_list = vec![
-        "baseband/*",
-        "common/qat",
-        "compress/*",
-        "crypto/*",
-        "dma/*",
-        "event/*",
-        "gpu/*",
-        "ml/*",
-        "power/*",
-        "raw/*",
-        "regex/*",
-        "vdpa/*",
-    ].join(",");
-    let disable_app_list = "*";  /* */
-
-    let meson_cfg = meson::Config::new().options(HashMap::from([
-        ("enable_libs", enable_lib_list.as_str()),
-        ("disable_drivers", disable_driver_list.as_str()),
-        ("disable_apps", disable_app_list)
-    ]));
-    meson::build(".", build_dir.to_str().unwrap(), meson_cfg);
-
-    /* open and print file 'cargo_rules.txt' from build_dir */
-    let cargo_ldflags_file = build_dir.join("cargo_ldflags.txt");
-    println!("cargo:rerun-if-changed={}", cargo_ldflags_file.display());
-    print!("{}", std::fs::read_to_string(cargo_ldflags_file).unwrap());
-
-    let bindgen_include_file = build_dir.join("bindgen_cflags.txt");
     let mut bindings = bindgen::Builder::default();
     let mut cc_build = cc::Build::new();
-    for line in std::fs::read_to_string(bindgen_include_file).unwrap().lines() {
+
+    env::set_var("PYTHONPYCACHEPREFIX", pycache_dir.to_str().unwrap());
+
+    if cfg!(feature = "installed_dpdk") {
+        pkg_config::probe_library("libdpdk").unwrap();
+    } else {
+        /* if not using installed DPDK, build using meson and extract ldflag and
+         * cflags from the generated files
+         */
+
+        /* enable libraries needed for physical network drivers */
+        let enable_lib_list = vec!["cryptodev", "security", "timer"].join(",");
+        /* disable unsupported driver classes */
+        let disable_driver_list = vec![
+            "baseband/*",
+            "common/qat",
+            "compress/*",
+            "crypto/*",
+            "dma/*",
+            "event/*",
+            "gpu/*",
+            "ml/*",
+            "power/*",
+            "raw/*",
+            "regex/*",
+            "vdpa/*",
+        ]
+        .join(",");
+        let disable_app_list = "*"; /* */
+
+        let meson_cfg = meson::Config::new().options(HashMap::from([
+            ("enable_libs", enable_lib_list.as_str()),
+            ("disable_drivers", disable_driver_list.as_str()),
+            ("disable_apps", disable_app_list),
+        ]));
+        meson::build(".", build_dir.to_str().unwrap(), meson_cfg);
+
+        /* open and print file 'cargo_rules.txt' from build_dir */
+        let cargo_ldflags_file = build_dir.join("cargo_ldflags.txt");
+        println!("cargo:rerun-if-changed={}", cargo_ldflags_file.display());
+        print!("{}", std::fs::read_to_string(cargo_ldflags_file).unwrap());
+
+        let bindgen_include_file = build_dir.join("bindgen_cflags.txt");
+        for line in std::fs::read_to_string(bindgen_include_file)
+            .unwrap()
+            .lines()
+        {
             bindings = bindings.clang_arg(line);
             cc_build = cc_build.flag(line).to_owned();
+        }
     }
 
-    let bindings = bindings.header("buildtools/rust/wrapper.h")
+    let bindings = bindings
+        .header("buildtools/rust/wrapper.h")
         .derive_default(true)
         .allowlist_function("rte_eal_init")
         .allowlist_function("rte_eal_cleanup")
@@ -68,7 +78,9 @@ fn main() {
         .expect("Unable to generate bindings");
 
     println!("cargo:rerun-if-changed=buildtools/rust/wrapper.c");
-    cc_build.file("buildtools/rust/wrapper.c").compile("wrapper");
+    cc_build
+        .file("buildtools/rust/wrapper.c")
+        .compile("wrapper");
 
     bindings
         .write_to_file(out_path.join("bindings.rs"))

@@ -3,5 +3,6 @@
  */
 
 #include <rte_eal.h>
+#include <rte_lcore.h>
 
 unsigned int dpdk_lcore_id(void);

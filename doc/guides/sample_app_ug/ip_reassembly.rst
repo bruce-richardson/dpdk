@@ -63,12 +63,7 @@ with 1 Rx queue per lcore:
 .. code-block:: console
 
     ./<build_dir>/examples/dpdk-ip_reassembly -l 2,4 -n 3 -- -p 5
-    EAL: coremask set to 14
-    EAL: Detected lcore 0 on socket 0
-    EAL: Detected lcore 1 on socket 1
-    EAL: Detected lcore 2 on socket 0
-    EAL: Detected lcore 3 on socket 1
-    EAL: Detected lcore 4 on socket 0
+    EAL: Detected CPU lcores: ...
     ...
 
     Initializing port 0 on lcore 2... Address:00:1B:21:76:FA:2C, rxq=0 txq=2,0 txq=4,1

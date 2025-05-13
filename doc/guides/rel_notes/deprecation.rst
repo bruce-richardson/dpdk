@@ -17,6 +17,16 @@ Other API and ABI deprecation notices are to be posted below.
 Deprecation Notices
 -------------------
 
+* EAL: The ``-c <coremask>`` commandline parameter is deprecated
+  and will be removed in a future release.
+  Use the ``-l <corelist>`` or ``--lcores=<corelist>`` parameters instead
+  to specify the cores to be used when running a DPDK application.
+
+* EAL: The ``-s <service-coremask>`` commandline parameter is deprecated
+  and will be removed in a future release.
+  Use the ``-S <service-corelist>`` parameter instead
+  to specify the cores to be used for background services in DPDK.
+
 * build: The ``enable_kmods`` option is deprecated and will be removed in a future release.
   Setting/clearing the option has no impact on the build.
   Instead, kernel modules will be always built for OS's where out-of-tree kernel modules

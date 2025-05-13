@@ -36,7 +36,7 @@ Running the Application
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 To run the application, start ``simple_mp`` binary in one terminal,
-passing at least two cores in the coremask/corelist:
+passing at least two cores in the corelist:
 
 .. code-block:: console
 
@@ -50,11 +50,7 @@ The process should start successfully and display a command prompt as follows:
 .. code-block:: console
 
     $ ./<build_dir>/examples/dpdk-simple_mp -l 0-1 -n 4 --proc-type=primary
-    EAL: coremask set to 3
-    EAL: Detected lcore 0 on socket 0
-    EAL: Detected lcore 1 on socket 0
-    EAL: Detected lcore 2 on socket 0
-    EAL: Detected lcore 3 on socket 0
+    EAL: Detected CPU lcores: ...
     ...
 
     EAL: Requesting 2 pages of size 1073741824
@@ -72,7 +68,7 @@ The process should start successfully and display a command prompt as follows:
     simple_mp >
 
 To run the secondary process to communicate with the primary process,
-again run the same binary setting at least two cores in the coremask/corelist:
+again run the same binary setting at least two cores in the corelist:
 
 .. code-block:: console
 
@@ -237,8 +233,8 @@ In addition to the EAL parameters, the application-specific parameters are:
 .. note::
 
    In the server process, has a single thread using the lowest numbered lcore
-   in the coremask/corelist, performs all packet I/O.
-   If coremask/corelist parameter specifies with more than a single lcore bit set,
+   in the corelist, performs all packet I/O.
+   If corelist parameter specifies with more than a single lcore,
    an additional lcore will be used for a thread to print packet count periodically.
 
 The server application stores configuration data in shared memory,

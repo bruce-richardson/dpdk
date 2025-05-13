@@ -4,10 +4,6 @@
 Lcore-related options
 ~~~~~~~~~~~~~~~~~~~~~
 
-*   ``-c <core mask>``
-
-    Set the hexadecimal bitmask of the cores to run on.
-
 *   ``-l <core list>``
 
     List of cores to run on
@@ -37,9 +33,9 @@ Lcore-related options
 
     Core ID that is used as main.
 
-*   ``-s <service core mask>``
+*   ``-S <service core list>``
 
-    Hexadecimal bitmask of cores to be used as service cores.
+    List of cores to be used as service cores.
 
 Device-related options
 ~~~~~~~~~~~~~~~~~~~~~~

@@ -28,11 +28,13 @@
 #include <rte_version.h>
 #include <rte_devargs.h>
 #include <rte_memcpy.h>
+#include <sys/queue.h>
 #ifndef RTE_EXEC_ENV_WINDOWS
 #include <rte_telemetry.h>
 #endif
 #include <rte_vect.h>
 
+#include <rte_argparse.h>
 #include <eal_export.h>
 #include "eal_internal_cfg.h"
 #include "eal_options.h"
@@ -46,6 +48,210 @@
 #define BITS_PER_HEX 4
 #define LCORE_OPT_LST 1
 #define LCORE_OPT_MSK 2
+
+struct arg_list_elem {
+	TAILQ_ENTRY(arg_list_elem) next;
+	char *arg;
+};
+TAILQ_HEAD(arg_list, arg_list_elem);
+
+struct eal_init_args {
+	/* define a struct member for each EAL option, member name is the same as option name.
+	 * Parameters that take an argument e.g. -l, are char *,
+	 * parameters that take no options e.g. --no-huge, are bool.
+	 * parameters that can be given multiple times e.g. -a, are arg_lists,
+	 * parameters that are optional e.g. --huge-unlink,
+	 *   are char * but are set to (void *)1 if the parameter is not given.
+	 * NOTE: List is to be kept alphabetically by option name
+	 */
+	struct arg_list allow;
+	char *base_virtaddr;
+	struct arg_list block;
+	char *coremask;
+	bool create_uio_dev;
+	struct arg_list driver_path;
+	char *file_prefix;
+	char *force_max_simd_bitwidth;
+	char *huge_dir;
+	char *huge_unlink;   /* parameter optional */
+	char *huge_worker_stack;  /* parameter optional */
+	bool in_memory;
+	char *iova_mode;
+	char *lcores;
+	bool legacy_mem;
+	char *log_color;   /* parameter optional */
+	char *log_level;
+	char *log_timestamp;  /* parameter optional */
+	char *main_lcore;
+	bool match_allocations;
+	char *mbuf_pool_ops_name;
+	char *memory_channels;
+	char *memory_ranks;
+	char *memory_size;
+	bool no_hpet;
+	bool no_huge;
+	bool no_pci;
+	bool no_shconf;
+	bool no_telemetry;
+	char *numa_mem;
+	char *numa_limit;
+	char *proc_type;
+	char *service_coremask;
+	char *service_corelist;
+	bool single_file_segments;
+	char *syslog;   /* parameter optional */
+	bool telemetry;
+	char *trace;
+	char *trace_bufsz;
+	char *trace_dir;
+	char *trace_mode;
+	struct arg_list vdev;
+	bool version;
+	char *vfio_intr;
+	char *vfio_vf_token;
+	bool vmware_tsc_map;
+};
+struct eal_init_args args;
+
+/* an rte_argparse callback to append the argument to an arg_list
+ * in args. The index is the offset into the struct of the list.
+ */
+static int
+arg_list_callback(uint32_t index, const char *arg, void *init_args)
+{
+	struct arg_list *list = RTE_PTR_ADD(init_args, index);
+	struct arg_list_elem *elem;
+
+	elem = malloc(sizeof(*elem));
+	if (elem == NULL)
+		return -1;
+
+	elem->arg = strdup(arg);
+	if (elem->arg == NULL) {
+		free(elem);
+		return -1;
+	}
+
+	TAILQ_INSERT_TAIL(list, elem, next);
+	return 0;
+}
+
+/* For arguments which have an arg_list type, they use callback (no val_saver),
+ * require a value, and have the SUPPORT_MULTI flag.
+ */
+#define LIST_ARG(long, short, help_str, fieldname) { \
+	.name_long = long, \
+	.name_short = short, \
+	.help = help_str, \
+	.val_set = (void *)offsetof(struct eal_init_args, fieldname), \
+	.value_required = RTE_ARGPARSE_VALUE_REQUIRED, \
+	.flags = RTE_ARGPARSE_FLAG_SUPPORT_MULTI, \
+}
+/* For arguments which have a string type, they use val_saver (no callback),
+ * and normally REQUIRED_VALUE.
+ */
+#define STR_ARG(long, short, help_str, fieldname) { \
+	.name_long = long, \
+	.name_short = short, \
+	.help = help_str, \
+	.val_saver = &args.fieldname, \
+	.value_required = RTE_ARGPARSE_VALUE_REQUIRED, \
+	.value_type = RTE_ARGPARSE_VALUE_TYPE_STR, \
+}
+/* For flags which have optional arguments, they use both val_saver and val_set,
+ * but still have a string type.
+ */
+#define OPT_STR_ARG(long, short, help_str, fieldname) { \
+	.name_long = long, \
+	.name_short = short, \
+	.help = help_str, \
+	.val_saver = &args.fieldname, \
+	.val_set = (void *)1, \
+	.value_required = RTE_ARGPARSE_VALUE_OPTIONAL, \
+	.value_type = RTE_ARGPARSE_VALUE_TYPE_STR, \
+}
+/* For boolean arguments, they use val_saver and val_set, with NO_VALUE flag.
+ */
+#define BOOL_ARG(long, short, help_str, fieldname) { \
+	.name_long = long, \
+	.name_short = short, \
+	.help = help_str, \
+	.val_saver = &args.fieldname, \
+	.val_set = (void *)1, \
+	.value_required = RTE_ARGPARSE_VALUE_NONE, \
+	.value_type = RTE_ARGPARSE_VALUE_TYPE_BOOL, \
+}
+
+struct rte_argparse eal_argparse  = {
+	.prog_name = "",
+	.usage = "<DPDK EAL options>",
+	.epilog = "For more information on EAL options, see the DPDK documentation at: \n"
+			"\thttps://doc.dpdk.org/guides/" RTE_EXEC_ENV_NAME "_gsg/",
+	.exit_on_error = true,
+	.callback = arg_list_callback,
+	.opaque = &args,
+	.args = {
+		/* list of EAL arguments as struct rte_argparse_arg. */
+		/* (Alphabetical) List of common options first */
+		LIST_ARG("--allow", "-a", "Add device to allow-list, causing DPDK to only use specified devices", allow),
+		STR_ARG("--base-virtaddr", NULL, "Base virtual address to reserve memory", base_virtaddr),
+		LIST_ARG("--block", "-b", "Add device to block-list, preventing DPDK from using the device", block),
+		STR_ARG("--coremask", "-c", "Hexadecimal bitmask of cores to use", coremask),
+		LIST_ARG("--driver-path", "-d", "Path to external driver shared object, or directory of drivers", driver_path),
+		STR_ARG("--force-max-simd-bitwidth", NULL, "Set max SIMD bitwidth to use in vector code paths", force_max_simd_bitwidth),
+		OPT_STR_ARG("--huge-unlink", NULL, "Unlink hugetlbfs files on exit (existing|always|never)", huge_unlink),
+		BOOL_ARG("--in-memory", NULL, "DPDK should not create shared mmap files in filesystem  (disables secondary process support)", in_memory),
+		STR_ARG("--iova-mode", NULL, "IOVA mapping mode, physical (pa)/virtual (va)", iova_mode),
+		STR_ARG("--lcores", "-l", "List of CPU cores to use", lcores),
+		BOOL_ARG("--legacy-mem", NULL, "Enable legacy memory behavior", legacy_mem),
+		OPT_STR_ARG("--log-color", NULL, "Enable/disable color in log output", log_color),
+		STR_ARG("--log-level", NULL, "Log level for loggers; use log-level=help for list of log types and levels", log_level),
+		OPT_STR_ARG("--log-timestamp", NULL, "Enable/disable timestamp in log output", log_timestamp),
+		STR_ARG("--main-lcore", NULL, "Select which core to use for the main thread", main_lcore),
+		STR_ARG("--mbuf-pool-ops-name", NULL, "User defined mbuf default pool ops name", mbuf_pool_ops_name),
+		STR_ARG("--memory-channels", "-n", "Number of memory channels per socket", memory_channels),
+		STR_ARG("--memory-ranks", "-r", "Force number of memory ranks (don't detect)", memory_ranks),
+		STR_ARG("--memory-size", "-m", "Total size of memory to allocate initially", memory_size),
+		BOOL_ARG("--no-hpet", NULL, "Disable HPET timer", no_hpet),
+		BOOL_ARG("--no-huge", NULL, "Disable hugetlbfs support", no_huge),
+		BOOL_ARG("--no-pci", NULL, "Disable all PCI devices", no_pci),
+		BOOL_ARG("--no-shconf", NULL, "Disable shared config file generation", no_shconf),
+		BOOL_ARG("--no-telemetry", NULL, "Disable telemetry", no_telemetry),
+		STR_ARG("--proc-type", NULL, "Type of process (primary|secondary|auto)", proc_type),
+		STR_ARG("--service-corelist", "-S", "List of cores to use for service threads", service_corelist),
+		STR_ARG("--service-coremask", "-s", "Hexadecimal bitmask of cores to use for service threads", service_coremask),
+		BOOL_ARG("--single-file-segments", NULL, "Store all pages within single files (per-page-size, per-node)", single_file_segments),
+		BOOL_ARG("--telemetry", NULL, "Enable telemetry", telemetry),
+		LIST_ARG("--vdev", NULL, "Add a virtual device to the system; format=<driver><id>[,key=val,...]", vdev),
+		BOOL_ARG("--vmware-tsc-map", NULL, "Use VMware TSC mapping instead of native RDTSC", vmware_tsc_map),
+		BOOL_ARG("--version", "-v", "Show version", version),
+
+#ifndef RTE_EXEC_ENV_WINDOWS
+		/* Linux and FreeBSD options*/
+		OPT_STR_ARG("--syslog", NULL, "Log to syslog (and optionally set facility)", syslog),
+		STR_ARG("--trace", NULL, "Enable trace based on regular expression trace name", trace),
+		STR_ARG("--trace-bufsz", NULL, "Trace buffer size", trace_bufsz),
+		STR_ARG("--trace-dir", NULL, "Trace directory", trace_dir),
+		STR_ARG("--trace-mode", NULL, "Trace mode", trace_mode),
+#endif
+
+#ifdef RTE_EXEC_ENV_LINUX
+		/* Linux-only options */
+		BOOL_ARG("--create-uio-dev", NULL, "Create /dev/uioX devices", create_uio_dev),
+		STR_ARG("--file-prefix", NULL, "Base filename of hugetlbfs files", file_prefix),
+		STR_ARG("--huge-dir", NULL, "Directory for hugepage files", huge_dir),
+		OPT_STR_ARG("--huge-worker-stack", NULL, "Allocate worker thread stacks from hugepage memory, with optional size (kB)", huge_worker_stack),
+		BOOL_ARG("--match-allocations", NULL, "Free hugepages exactly as allocated", match_allocations),
+		STR_ARG("--numa-mem", NULL, "Memory to allocate on NUMA nodes (comma separated values)", numa_mem),
+		STR_ARG("--numa-limit", NULL, "Limit memory allocation on NUMA nodes (comma separated values)", numa_limit),
+		STR_ARG("--socket-mem", NULL, "Alias for --numa-mem", numa_mem),
+		STR_ARG("--socket-limit", NULL, "Alias for --numa-limit", numa_limit),
+		STR_ARG("--vfio-intr", NULL, "VFIO interrupt mode (legacy|msi|msix)", vfio_intr),
+		STR_ARG("--vfio-vf-token", NULL, "VF token (UUID) shared between SR-IOV PF and VFs", vfio_vf_token),
+#endif
+		ARGPARSE_ARG_END(),
+	}
+};
 
 const char
 eal_short_options[] =

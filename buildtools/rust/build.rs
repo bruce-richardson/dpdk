@@ -68,12 +68,6 @@ fn main() {
     let bindings = bindings
         .header("buildtools/rust/wrapper.h")
         .derive_default(true)
-        .allowlist_function("rte_eal_init")
-        .allowlist_function("rte_eal_cleanup")
-        .allowlist_function("rte_thread_register")
-        .allowlist_function("rte_thread_unregister")
-        .allowlist_item("LCORE_ID_ANY")
-        .allowlist_function("dpdk_lcore_id")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))

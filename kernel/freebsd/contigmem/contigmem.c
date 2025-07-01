@@ -35,6 +35,7 @@ struct contigmem_buffer {
 	void           *addr;
 	int             refcnt;
 	struct mtx      mtx;
+	int             socket_id;  /* NUMA domain/socket this buffer belongs to */
 };
 
 struct contigmem_vm_handle {
@@ -52,6 +53,10 @@ static d_close_t        contigmem_close;
 static int              contigmem_num_buffers = RTE_CONTIGMEM_DEFAULT_NUM_BUFS;
 static int64_t          contigmem_buffer_size = RTE_CONTIGMEM_DEFAULT_BUF_SIZE;
 static bool             contigmem_coredump_enable;
+static char             contigmem_socket_mem[256] = "";
+static int64_t          contigmem_socket_sizes[MAXMEMDOM];
+static int              contigmem_socket_count = 0;
+static bool             contigmem_use_socket_mem = false;
 
 static eventhandler_tag contigmem_eh_tag;
 static struct contigmem_buffer contigmem_buffers[RTE_CONTIGMEM_MAX_NUM_BUFS];
@@ -61,6 +66,7 @@ static int              contigmem_refcnt;
 TUNABLE_INT("hw.contigmem.num_buffers", &contigmem_num_buffers);
 TUNABLE_QUAD("hw.contigmem.buffer_size", &contigmem_buffer_size);
 TUNABLE_BOOL("hw.contigmem.coredump_enable", &contigmem_coredump_enable);
+TUNABLE_STR("hw.contigmem.socket_mem", contigmem_socket_mem, sizeof(contigmem_socket_mem));
 
 static SYSCTL_NODE(_hw, OID_AUTO, contigmem, CTLFLAG_RD, 0, "contigmem");
 
@@ -72,6 +78,9 @@ SYSCTL_INT(_hw_contigmem, OID_AUTO, num_references, CTLFLAG_RD,
 	&contigmem_refcnt, 0, "Number of references to contigmem");
 SYSCTL_BOOL(_hw_contigmem, OID_AUTO, coredump_enable, CTLFLAG_RD,
 	&contigmem_coredump_enable, 0, "Include mapped buffers in core dump");
+SYSCTL_STRING(_hw_contigmem, OID_AUTO, socket_mem, CTLFLAG_RD,
+	contigmem_socket_mem, sizeof(contigmem_socket_mem),
+	"Per-socket memory allocation specification");
 
 static SYSCTL_NODE(_hw_contigmem, OID_AUTO, physaddr, CTLFLAG_RD, 0,
 	"physaddr");
@@ -114,12 +123,260 @@ static struct cdevsw contigmem_ops = {
 	.d_close        = contigmem_close,
 };
 
+/*
+ * Parse size suffix (k, M, G, T) and return size in bytes.
+ */
+static int64_t
+contigmem_parse_size_suffix(const char *str)
+{
+	char *endptr;
+	unsigned long size;
+
+	size = strtoul(str, &endptr, 10);
+	if (endptr == str)  /* No digits found */
+		return -1;
+
+	switch (*endptr) {
+	case 'T': size *= 1024; /* FALLTHROUGH */
+	case 'G': size *= 1024; /* FALLTHROUGH */
+	case 'M': size *= 1024; /* FALLTHROUGH */
+	case 'k': size *= 1024; break;
+	case '\0':
+	case ',':
+		/* No suffix, size is in bytes */
+		break;
+	default:
+		return -1;
+	}
+
+	return (int64_t)size;
+}
+
+/*
+ * Calculate the highest power of two that divides into all given sizes.
+ * Minimum value is 16M since all sizes must be multiples of 16M.
+ * Zero values are skipped.
+ */
+static int64_t
+contigmem_highest_power_of_two_divisor(int64_t *sizes, int count)
+{
+	int result_trailing_zeros = 64;  /* Start with maximum possible */
+
+	/* Find the minimum trailing zeros across all non-zero sizes */
+	for (int i = 0; i < count; i++) {
+		/* Skip zero values */
+		if (sizes[i] == 0)
+			continue;
+
+		/* Use ffsl() to find the position of the lowest set bit */
+		int trailing_zeros = ffsl(sizes[i]) - 1;  /* ffsl returns 1-based index */
+
+		/* Keep track of the minimum trailing zeros across all sizes */
+		if (trailing_zeros < result_trailing_zeros)
+			result_trailing_zeros = trailing_zeros;
+	}
+
+	/* Convert trailing zeros to actual power of two value */
+	return 1LL << result_trailing_zeros;
+}
+
+/*
+ * Parse socket_mem string and configure per-socket memory allocation.
+ * Format: "size1,size2,size3,..." where each size can have suffix k,M,G,T
+ * Each size must be multiple of 16M.
+ * Buffer size will be the highest power of two that divides all sizes (min 16M).
+ */
+static int
+contigmem_parse_socket_mem(const char *socket_mem_str)
+{
+	char *str_copy, *token, *remaining;
+	int socket_id = 0;
+	int64_t total_buffers = 0;
+	int64_t gcd_size = 0;
+	int i;
+
+	if (strlen(socket_mem_str) == 0)
+		return 0;  /* No socket_mem specified */
+
+	str_copy = malloc(strlen(socket_mem_str) + 1, M_CONTIGMEM, M_WAITOK);
+	strcpy(str_copy, socket_mem_str);
+	remaining = str_copy;
+
+	/* First pass: parse and validate sizes */
+	while ((token = strsep(&remaining, ",")) != NULL && socket_id < MAXMEMDOM) {
+		int64_t size = contigmem_parse_size_suffix(token);
+
+		if (size < 0) {
+			printf("Invalid socket memory size: %s\n", token);
+			free(str_copy, M_CONTIGMEM);
+			return EINVAL;
+		}
+
+		/* Check that non-zero size is multiple of 16M */
+		if (size > 0 && size % (16 * 1024 * 1024) != 0) {
+			printf("Socket memory size %s must be multiple of 16M\n", token);
+			free(str_copy, M_CONTIGMEM);
+			return EINVAL;
+		}
+
+		contigmem_socket_sizes[socket_id] = size;
+		socket_id++;
+	}
+
+	contigmem_socket_count = socket_id;
+	free(str_copy, M_CONTIGMEM);
+
+	if (contigmem_socket_count == 0)
+		return 0;
+
+	/* Calculate highest power of two that divides all socket sizes (zeros are skipped) */
+	gcd_size = contigmem_highest_power_of_two_divisor(contigmem_socket_sizes, contigmem_socket_count);
+
+	/* Calculate total number of buffers needed (only for non-zero sockets) */
+	for (i = 0; i < contigmem_socket_count; i++) {
+		if (contigmem_socket_sizes[i] > 0) {
+			total_buffers += contigmem_socket_sizes[i] / gcd_size;
+		}
+	}
+
+	if (total_buffers == 0) {
+		printf("At least one socket must have non-zero memory size\n");
+		return EINVAL;
+	}
+
+	if (total_buffers > RTE_CONTIGMEM_MAX_NUM_BUFS) {
+		printf("Total buffers (%ld) exceeds maximum (%d)\n",
+			total_buffers, RTE_CONTIGMEM_MAX_NUM_BUFS);
+		return EINVAL;
+	}
+
+	/* Update global configuration */
+	contigmem_buffer_size = gcd_size;
+	contigmem_num_buffers = (int)total_buffers;
+	contigmem_use_socket_mem = true;
+
+	printf("Socket memory configuration: buffer_size=%ld, num_buffers=%d\n",
+		contigmem_buffer_size, contigmem_num_buffers);
+
+	return 0;
+}
+
+/*
+ * Helper function to setup a buffer and register its sysctl.
+ */
+static void
+contigmem_setup_buffer(int buffer_idx, void *addr, int socket_id)
+{
+	char index_string[8], description[32];
+
+	printf("%2u: virt=%p phys=%p socket=%d\n", buffer_idx, addr,
+		(void *)pmap_kextract((vm_offset_t)addr), socket_id);
+
+	mtx_init(&contigmem_buffers[buffer_idx].mtx, "contigmem", NULL, MTX_DEF);
+	contigmem_buffers[buffer_idx].addr = addr;
+	contigmem_buffers[buffer_idx].refcnt = 0;
+	contigmem_buffers[buffer_idx].socket_id = socket_id;
+
+	snprintf(index_string, sizeof(index_string), "%d", buffer_idx);
+	snprintf(description, sizeof(description),
+			"phys addr for buffer %d", buffer_idx);
+	SYSCTL_ADD_PROC(NULL,
+			&SYSCTL_NODE_CHILDREN(_hw_contigmem, physaddr), OID_AUTO,
+			index_string, CTLTYPE_U64 | CTLFLAG_RD,
+			(void *)(uintptr_t)buffer_idx, 0, contigmem_physaddr, "LU",
+			description);
+}
+
+/*
+ * Allocate buffers per socket according to socket_mem configuration.
+ */
+static int
+contigmem_allocate_socket_buffers(void)
+{
+	void *socket_addr;
+	int socket_id, buffers_per_socket, buffer_idx = 0;
+	int i;
+
+	for (socket_id = 0; socket_id < contigmem_socket_count; socket_id++) {
+		/* Skip sockets with zero allocation */
+		if (contigmem_socket_sizes[socket_id] == 0) {
+			printf("Socket %d: skipping (zero allocation)\n", socket_id);
+			continue;
+		}
+
+		buffers_per_socket = (int)(contigmem_socket_sizes[socket_id] / contigmem_buffer_size);
+
+		/* First, try to allocate entire socket memory as one contiguous block */
+		socket_addr = contigmalloc_domainset(contigmem_socket_sizes[socket_id], M_CONTIGMEM,
+			DOMAINSET_FIXED(socket_id), M_ZERO,
+			0, BUS_SPACE_MAXADDR, contigmem_buffer_size, 0);
+
+		if (socket_addr != NULL) {
+			/* Success: single large allocation */
+			printf("Socket %d: allocated %ld bytes at virt=%p phys=%p (single block)\n", socket_id,
+				contigmem_socket_sizes[socket_id], socket_addr,
+				(void *)pmap_kextract((vm_offset_t)socket_addr));
+
+			/* Divide the socket allocation into individual buffers */
+			for (i = 0; i < buffers_per_socket; i++) {
+				void *addr = (char *)socket_addr + (i * contigmem_buffer_size);
+				contigmem_setup_buffer(buffer_idx++, addr, socket_id);
+			}
+		} else {
+			/* Fallback: allocate buffers individually */
+			printf("Socket %d: large allocation failed, falling back to individual buffers\n", socket_id);
+
+			for (i = 0; i < buffers_per_socket; i++) {
+				void *addr = contigmalloc_domainset(contigmem_buffer_size, M_CONTIGMEM,
+					DOMAINSET_FIXED(socket_id), M_ZERO,
+					0, BUS_SPACE_MAXADDR, contigmem_buffer_size, 0);
+				if (addr == NULL) {
+					printf("contigmalloc failed for buffer %d on socket %d\n",
+						buffer_idx, socket_id);
+					return ENOMEM;
+				}
+
+				contigmem_setup_buffer(buffer_idx++, addr, socket_id);
+			}
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Allocate buffers using legacy interleaved allocation method.
+ */
+static int
+contigmem_allocate_legacy_buffers(void)
+{
+	void *addr;
+	int i;
+
+	for (i = 0; i < contigmem_num_buffers; i++) {
+		addr = contigmalloc_domainset(contigmem_buffer_size, M_CONTIGMEM,
+			DOMAINSET_IL(), M_ZERO,
+			0, BUS_SPACE_MAXADDR, contigmem_buffer_size, 0);
+		if (addr == NULL) {
+			printf("contigmalloc failed for buffer %d\n", i);
+			return ENOMEM;
+		}
+
+		contigmem_setup_buffer(i, addr, -1);  /* -1 for unknown/interleaved socket */
+	}
+
+	return 0;
+}
+
 static int
 contigmem_load(void)
 {
-	char index_string[8], description[32];
-	int  i, error = 0;
-	void *addr;
+	int error = 0;
+
+	/* Parse socket_mem configuration if provided */
+	error = contigmem_parse_socket_mem(contigmem_socket_mem);
+	if (error != 0)
+		goto error;
 
 	if (contigmem_num_buffers > RTE_CONTIGMEM_MAX_NUM_BUFS) {
 		printf("%d buffers requested is greater than %d allowed\n",
@@ -136,31 +393,12 @@ contigmem_load(void)
 		goto error;
 	}
 
-	for (i = 0; i < contigmem_num_buffers; i++) {
-		addr = contigmalloc(contigmem_buffer_size, M_CONTIGMEM, M_ZERO,
-			0, BUS_SPACE_MAXADDR, contigmem_buffer_size, 0);
-		if (addr == NULL) {
-			printf("contigmalloc failed for buffer %d\n", i);
-			error = ENOMEM;
-			goto error;
-		}
-
-		printf("%2u: virt=%p phys=%p\n", i, addr,
-			(void *)pmap_kextract((vm_offset_t)addr));
-
-		mtx_init(&contigmem_buffers[i].mtx, "contigmem", NULL, MTX_DEF);
-		contigmem_buffers[i].addr = addr;
-		contigmem_buffers[i].refcnt = 0;
-
-		snprintf(index_string, sizeof(index_string), "%d", i);
-		snprintf(description, sizeof(description),
-				"phys addr for buffer %d", i);
-		SYSCTL_ADD_PROC(NULL,
-				&SYSCTL_NODE_CHILDREN(_hw_contigmem, physaddr), OID_AUTO,
-				index_string, CTLTYPE_U64 | CTLFLAG_RD,
-				(void *)(uintptr_t)i, 0, contigmem_physaddr, "LU",
-				description);
-	}
+	/* Allocate buffers using appropriate method */
+	error = contigmem_use_socket_mem ?
+			contigmem_allocate_socket_buffers() :
+			contigmem_allocate_legacy_buffers();
+	if (error != 0)
+		goto error;
 
 	contigmem_cdev = make_dev_credf(0, &contigmem_ops, 0, NULL, UID_ROOT,
 			GID_WHEEL, 0600, "contigmem");
@@ -168,7 +406,7 @@ contigmem_load(void)
 	return 0;
 
 error:
-	for (i = 0; i < contigmem_num_buffers; i++) {
+	for (int i = 0; i < contigmem_num_buffers; i++) {
 		if (contigmem_buffers[i].addr != NULL) {
 			contigfree(contigmem_buffers[i].addr,
 				contigmem_buffer_size, M_CONTIGMEM);

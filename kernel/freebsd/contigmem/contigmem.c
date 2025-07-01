@@ -45,6 +45,7 @@ struct contigmem_vm_handle {
 static int              contigmem_load(void);
 static int              contigmem_unload(void);
 static int              contigmem_physaddr(SYSCTL_HANDLER_ARGS);
+static int              contigmem_socketid(SYSCTL_HANDLER_ARGS);
 
 static d_mmap_single_t  contigmem_mmap_single;
 static d_open_t         contigmem_open;
@@ -84,6 +85,9 @@ SYSCTL_STRING(_hw_contigmem, OID_AUTO, socket_mem, CTLFLAG_RD,
 
 static SYSCTL_NODE(_hw_contigmem, OID_AUTO, physaddr, CTLFLAG_RD, 0,
 	"physaddr");
+
+static SYSCTL_NODE(_hw_contigmem, OID_AUTO, socketid, CTLFLAG_RD, 0,
+	"socketid");
 
 MALLOC_DEFINE(M_CONTIGMEM, "contigmem", "contigmem(4) allocations");
 
@@ -285,6 +289,14 @@ contigmem_setup_buffer(int buffer_idx, void *addr, int socket_id)
 			index_string, CTLTYPE_U64 | CTLFLAG_RD,
 			(void *)(uintptr_t)buffer_idx, 0, contigmem_physaddr, "LU",
 			description);
+
+	snprintf(description, sizeof(description),
+			"socket ID for buffer %d", buffer_idx);
+	SYSCTL_ADD_PROC(NULL,
+			&SYSCTL_NODE_CHILDREN(_hw_contigmem, socketid), OID_AUTO,
+			index_string, CTLTYPE_INT | CTLFLAG_RD,
+			(void *)(uintptr_t)buffer_idx, 0, contigmem_socketid, "I",
+			description);
 }
 
 /*
@@ -452,6 +464,16 @@ contigmem_physaddr(SYSCTL_HANDLER_ARGS)
 
 	physaddr = (uint64_t)vtophys(contigmem_buffers[index].addr);
 	return sysctl_handle_64(oidp, &physaddr, 0, req);
+}
+
+static int
+contigmem_socketid(SYSCTL_HANDLER_ARGS)
+{
+	int	socketid;
+	int	index = (int)(uintptr_t)arg1;
+
+	socketid = contigmem_buffers[index].socket_id;
+	return sysctl_handle_int(oidp, &socketid, 0, req);
 }
 
 static int

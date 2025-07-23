@@ -4,6 +4,28 @@
 Lcore-related options
 ~~~~~~~~~~~~~~~~~~~~~
 
+*   ``-L, --lcores-remapped <core list>``
+
+    List of physical CPU cores to use,
+    with each core assigned a sequential logical core (lcore) ID starting from 0.
+    This is a simplified alternative to ``--lcores``, described below,
+    for cases where you want to use specific physical cores,
+    (some or all of which have physical ids greater than RTE_MAX_LCORE)
+    but don't need complex logical-to-physical core mappings.
+
+    The argument format is a standard core list: ``<c1>[-c2][,c3[-c4],...]``
+    where ``c1``, ``c2``, etc are physical core indexes.
+
+    Examples:
+
+    ``--lcores-remapped=3-5``
+      Use physical cores 3, 4, and 5 as logical cores 0, 1, and 2 respectively.
+      This is equivalent to ``--lcores=0@3,1@4,2@5``.
+
+    ``--lcores-remapped=150,152,154``
+      Use physical cores 150, 152, and 154 as logical cores 0, 1, and 2 respectively.
+      This is equivalent to ``--lcores=0@150,1@152,2@154``.
+
 *   ``-l, --lcores <core list>``
 
     List of cores to run on
@@ -64,8 +86,30 @@ Lcore-related options
 
 .. note::
 
-    At a given instance only one core option ``--lcores``, ``-l`` or ``-c`` can
+    At a given instance only one core option ``--lcores`` / ``-l``, or ``--lcores-remapped`` / ``-L`` can
     be used.
+
+*   ``--lcoreid-base <base ID>``
+
+    Adjust the base logical core ID for ``--lcores-remapped`` (default: 0).
+    When used with ``--lcores-remapped``,
+    logical core numbering starts from this value instead of 0.
+    This is particularly useful for secondary processes in a multi-process setup,
+    as lcore_ids must all be unique across all processes.
+
+    Example:
+
+    ``--lcores-remapped=3-5 --lcoreid-base=10``
+      Use physical cores 3, 4, and 5 as logical cores 10, 11, and 12 respectively.
+      This is equivalent to ``--lcores=10@3,11@4,12@5``.
+
+.. note::
+
+    The ``--lcores-remapped`` option is ignored if used with ``--lcores``, ``-l`` option.
+
+.. note::
+
+    For secondary processes, ``--lcoreid-base`` *must* be specified when using ``--lcores-remapped``.
 
 *   ``--main-lcore <core ID>``
 

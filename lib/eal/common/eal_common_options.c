@@ -232,6 +232,8 @@ eal_collate_args(int argc, char **argv)
 
 	/* for non-list args, we can just check for zero/null values using macro */
 	if (CONFLICTING_OPTIONS(args, coremask, lcores) ||
+			CONFLICTING_OPTIONS(args, coremask, lcores_remapped) ||
+			CONFLICTING_OPTIONS(args, lcores, lcores_remapped) ||
 			CONFLICTING_OPTIONS(args, service_coremask, service_corelist) ||
 			CONFLICTING_OPTIONS(args, no_telemetry, telemetry) ||
 			CONFLICTING_OPTIONS(args, memory_size, numa_mem) ||
@@ -1351,6 +1353,67 @@ err:
 	return ret;
 }
 
+static int
+eal_parse_lcores_remapped(const char *corelist, const char *base_str)
+{
+	struct rte_config *cfg = rte_eal_get_configuration();
+	rte_cpuset_t phys_cores;
+
+	/* Reset lcore config */
+	for (int i = 0; i < RTE_MAX_LCORE; i++) {
+		cfg->lcore_role[i] = ROLE_OFF;
+		lcore_config[i].core_index = -1;
+		CPU_ZERO(&lcore_config[i].cpuset);
+	}
+
+	/* Parse the physical core list using rte_argparse_parse_type */
+	if (rte_argparse_parse_type(corelist, RTE_ARGPARSE_VALUE_TYPE_CORELIST, &phys_cores) < 0) {
+		EAL_LOG(ERR, "Invalid lcores-remapped format: '%s'", corelist);
+		return -1;
+	}
+	if (CPU_COUNT(&phys_cores) == 0) {
+		EAL_LOG(ERR, "No valid cores specified in lcores-remapped: '%s'", corelist);
+		return -1;
+	}
+
+	if (check_cpuset(&phys_cores) < 0)
+		return -1;
+
+	/* Parse base lcore ID if provided */
+	unsigned int base_lcore = 0;
+	if (base_str != NULL) {
+		char *end;
+		errno = 0;
+		base_lcore = strtoul(base_str, &end, 10);
+		if (errno || end == NULL || *end != '\0' || base_lcore >= RTE_MAX_LCORE) {
+			EAL_LOG(ERR, "Invalid lcoreid-base: '%s'", base_str);
+			return -1;
+		}
+	}
+
+	/* Map logical cores starting from base_lcore to physical cores */
+	unsigned int count = 0;
+	for (int i = 0; i < CPU_SETSIZE && count < RTE_MAX_LCORE; i++) {
+		if (CPU_ISSET(i, &phys_cores)) {
+			const unsigned int lcore_id = base_lcore + count;
+			if (lcore_id >= RTE_MAX_LCORE) {
+				EAL_LOG(ERR, "Logical lcore %u exceeds RTE_MAX_LCORE (%d)",
+						lcore_id, RTE_MAX_LCORE);
+				return -1;
+			}
+
+			/* Set up the lcore configuration */
+			cfg->lcore_role[lcore_id] = ROLE_RTE;
+			lcore_config[lcore_id].core_index = count;
+			CPU_SET(i, &lcore_config[lcore_id].cpuset);
+			count++;
+		}
+	}
+
+	cfg->lcore_count = count;
+	return 0;
+}
+
 static void
 eal_log_usage(void)
 {
@@ -1842,6 +1905,8 @@ eal_parse_args(void)
 			EAL_LOG(ERR, "invalid process type: %s", args.proc_type);
 			return -1;
 		}
+		if (int_cfg->process_type == RTE_PROC_AUTO)
+			int_cfg->process_type = eal_proc_type_detect();
 	}
 
 	/* device -a/-b/-vdev options*/
@@ -1881,6 +1946,15 @@ eal_parse_args(void)
 			EAL_LOG(ERR, "invalid lcore list: '%s'", args.lcores);
 			return -1;
 		}
+		core_parsed = 1;
+	} else if (args.lcores_remapped != NULL) {
+		if (int_cfg->process_type == RTE_PROC_SECONDARY && args.lcoreid_base == NULL) {
+			EAL_LOG(ERR, "Must use --lcoreid-base with --lcores-remapped when running secondary processes");
+			return -1;
+		}
+		/* Parse the remapped cores list */
+		if (eal_parse_lcores_remapped(args.lcores_remapped, args.lcoreid_base) < 0)
+			return -1;
 		core_parsed = 1;
 	}
 	/* service core options */
@@ -2187,8 +2261,6 @@ eal_adjust_config(struct internal_config *internal_cfg)
 {
 	int i;
 	struct rte_config *cfg = rte_eal_get_configuration();
-	struct internal_config *internal_conf =
-		eal_get_internal_configuration();
 
 	if (!core_parsed)
 		eal_auto_detect_cores(cfg);
@@ -2197,9 +2269,6 @@ eal_adjust_config(struct internal_config *internal_cfg)
 		EAL_LOG(ERR, "No detected lcore is enabled, please check the core list");
 		return -1;
 	}
-
-	if (internal_conf->process_type == RTE_PROC_AUTO)
-		internal_conf->process_type = eal_proc_type_detect();
 
 	compute_ctrl_threads_cpuset(internal_cfg);
 

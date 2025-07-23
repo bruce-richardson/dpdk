@@ -42,6 +42,8 @@ OPT_STR_ARG("--huge-unlink", NULL, "Unlink hugetlbfs files on exit (existing|alw
 BOOL_ARG("--in-memory", NULL, "DPDK should not create shared mmap files in filesystem  (disables secondary process support)", in_memory)
 STR_ARG("--iova-mode", NULL, "IOVA mapping mode, physical (pa)/virtual (va)", iova_mode)
 STR_ARG("--lcores", "-l", "List of CPU cores to use", lcores)
+STR_ARG("--lcores-remapped", "-L", "List of cores to use, assigning each a sequential lcore ID (start 0 by default)", lcores_remapped)
+STR_ARG("--lcoreid-base", NULL, "Number remapped lcores from <N>, rather than 0 (e.g. for secondary processes)", lcoreid_base)
 BOOL_ARG("--legacy-mem", NULL, "Enable legacy memory behavior", legacy_mem)
 OPT_STR_ARG("--log-color", NULL, "Enable/disable color in log output", log_color)
 STR_ARG("--log-level", NULL, "Log level for loggers; use log-level=help for list of log types and levels", log_level)

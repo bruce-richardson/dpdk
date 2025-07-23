@@ -55,6 +55,15 @@ New Features
      Also, make sure to start the actual text at the margin.
      =======================================================
 
+* **Added EAL lcores-remapped(-L) argument to simplify running on higher-numbered cores.**
+
+  Added new EAL command line arguments ``-L, --lcores-remapped`` and ``--lcoreid-base``
+  that provide a simplified way to specify which physical CPU cores to use.
+  The ``--lcores-remapped`` argument allows specifying a list of physical cores on which the EAL threads are to be spawned,
+  with each thread being assigned an lcore id in sequence.
+  The lcore numbering starts at 0 by default, though this can be overridden using ``--lcoreid-base``.
+  See :doc:`../linux_gsg/eal_args.include` for more details.
+
 * **Allow overriding the automatic usage/help generation in argparse library.**
 
   The argparse library now supports overriding the automatic help text generation,

@@ -201,6 +201,47 @@ conflicting_options(uintptr_t opt1, uintptr_t opt2, const char *opt1_name, const
 #define CONFLICTING_OPTIONS(args, opt1, opt2) \
 	conflicting_options((uintptr_t)(args.opt1), (uintptr_t)(args.opt2), #opt1, #opt2)
 
+enum when_ignored {
+	OPT_IGNORED_WITH,
+	OPT_IGNORED_WITHOUT,
+};
+static inline bool  /* return bool so we can track what warnings are printed */
+ignored_option(uintptr_t ignored, uintptr_t opt2, const char *ignored_name, const char *opt2_name,
+		enum when_ignored when)
+{
+	char name1[64];  /* should be the max length of any argument */
+	char name2[64];
+
+	if (!ignored)
+		return false;
+
+	strlcpy(name1, ignored_name, sizeof(name1));
+	strlcpy(name2, opt2_name, sizeof(name2));
+	for (int i = 0; name1[i] != '\0'; i++)
+		if (name1[i] == '_')
+			name1[i] = '-';
+	for (int i = 0; name2[i] != '\0'; i++)
+		if (name2[i] == '_')
+			name2[i] = '-';
+
+	if (when == OPT_IGNORED_WITH && opt2) {
+		EAL_LOG(WARNING, "Option '%s' ignored when used with option '%s'", name1, name2);
+		return true;
+	} else if (when == OPT_IGNORED_WITHOUT && !opt2) {
+		EAL_LOG(WARNING, "Option '%s' ignored without option '%s'", name1, name2);
+		return true;
+	}
+	return false;
+}
+/* prints a warning when option "ignored" is used *with* option "opt2" */
+#define IGNORE_OPTION_WITH(args, ignored, opt2) \
+	ignored_option((uintptr_t)(args.ignored), (uintptr_t)(args.opt2), #ignored, #opt2, \
+			OPT_IGNORED_WITH)
+/* prints a warning when option "ignored" is used *without* option "opt2" */
+#define IGNORE_OPTION_WITHOUT(args, ignored, opt2) \
+	ignored_option((uintptr_t)(args.ignored), (uintptr_t)(args.opt2), #ignored, #opt2, \
+			OPT_IGNORED_WITHOUT)
+
 /* function to call into argparse library to parse the passed argc/argv parameters
  * to the eal_init_args structure.
  */
@@ -248,6 +289,12 @@ eal_collate_args(int argc, char **argv)
 			CONFLICTING_OPTIONS(args, no_huge, single_file_segments) ||
 			CONFLICTING_OPTIONS(args, in_memory, huge_unlink))
 		return -1;
+
+	/* warn about some ignored options */
+	if (!IGNORE_OPTION_WITH(args, lcoreid_base, lcores) &&
+			!IGNORE_OPTION_WITH(args, lcoreid_base, coremask))
+		/* only warn about not having --lcores-remapped if we didn't already warn */
+		IGNORE_OPTION_WITHOUT(args, lcoreid_base, lcores_remapped);
 
 	argv[retval - 1] = argv[0];
 	return retval - 1;

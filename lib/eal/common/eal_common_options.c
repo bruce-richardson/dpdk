@@ -184,6 +184,29 @@ struct rte_argparse eal_argparse  = {
 	}
 };
 
+static inline bool
+conflicting_options(uintptr_t opt1, uintptr_t opt2, const char *opt1_name, const char *opt2_name)
+{
+	char name1[64];  /* should be the max length of any argument */
+	char name2[64];
+
+	strlcpy(name1, opt1_name, sizeof(name1));
+	strlcpy(name2, opt2_name, sizeof(name2));
+	for (int i = 0; name1[i] != '\0'; i++)
+		if (name1[i] == '_')
+			name1[i] = '-';
+	for (int i = 0; name2[i] != '\0'; i++)
+		if (name2[i] == '_')
+			name2[i] = '-';
+	if (opt1 && opt2) {
+		EAL_LOG(ERR, "Options '%s' and '%s' can't be used at the same time", name1, name2);
+		return true;
+	}
+	return false;  /* no conflicts */
+}
+#define CONFLICTING_OPTIONS(args, opt1, opt2) \
+	conflicting_options((uintptr_t)(args.opt1), (uintptr_t)(args.opt2), #opt1, #opt2)
+
 /* function to call into argparse library to parse the passed argc/argv parameters
  * to the eal_init_args structure.
  */
@@ -207,6 +230,30 @@ eal_collate_args(int argc, char **argv)
 	int retval = rte_argparse_parse(&eal_argparse, argc, argv);
 	if (retval < 0)
 		return retval;
+
+	/* check for conflicting options */
+	/* both -a and -b cannot be used together (one list must be empty at least) */
+	if (!TAILQ_EMPTY(&args.allow) && !TAILQ_EMPTY(&args.block)) {
+		EAL_LOG(ERR, "Options allow (-a) and block (-b) can't be used at the same time");
+		return -1;
+	}
+
+	/* for non-list args, we can just check for zero/null values using macro */
+	if (CONFLICTING_OPTIONS(args, coremask, lcores) ||
+			CONFLICTING_OPTIONS(args, service_coremask, service_corelist) ||
+			CONFLICTING_OPTIONS(args, no_telemetry, telemetry) ||
+			CONFLICTING_OPTIONS(args, memory_size, numa_mem) ||
+			CONFLICTING_OPTIONS(args, no_huge, numa_mem) ||
+			CONFLICTING_OPTIONS(args, no_huge, huge_worker_stack) ||
+			CONFLICTING_OPTIONS(args, numa_limit, legacy_mem) ||
+			CONFLICTING_OPTIONS(args, legacy_mem, in_memory) ||
+			CONFLICTING_OPTIONS(args, legacy_mem, match_allocations) ||
+			CONFLICTING_OPTIONS(args, no_huge, match_allocations) ||
+			CONFLICTING_OPTIONS(args, no_huge, huge_unlink) ||
+			CONFLICTING_OPTIONS(args, single_file_segments, huge_unlink) ||
+			CONFLICTING_OPTIONS(args, no_huge, single_file_segments) ||
+			CONFLICTING_OPTIONS(args, in_memory, huge_unlink))
+		return -1;
 
 	argv[retval - 1] = argv[0];
 	return retval - 1;
@@ -1793,78 +1840,6 @@ eal_parse_args(void)
 	struct internal_config *int_cfg = eal_get_internal_configuration();
 	struct rte_config *rte_cfg = rte_eal_get_configuration();
 	struct arg_list_elem *arg;
-
-	/* check for conflicting options */
-	/* both -a and -b cannot be used together (one list must be empty at least) */
-	if (!TAILQ_EMPTY(&args.allow) && !TAILQ_EMPTY(&args.block)) {
-		EAL_LOG(ERR, "Options allow (-a) and block (-b) can't be used at the same time");
-		return -1;
-	}
-	/* both -l and -c cannot be used at the same time */
-	if (args.coremask != NULL && args.lcores != NULL) {
-		EAL_LOG(ERR, "Options coremask (-c) and core list (-l) can't be used at the same time");
-		return -1;
-	}
-	/* both -s and -S cannot be used at the same time */
-	if (args.service_coremask != NULL && args.service_corelist != NULL) {
-		EAL_LOG(ERR, "Options service coremask (-s) and service core list (-S) can't be used at the same time");
-		return -1;
-	}
-	/* can't have both telemetry and no-telemetry */
-	if (args.no_telemetry && args.telemetry) {
-		EAL_LOG(ERR, "Options telemetry and no-telemetry can't be used at the same time");
-		return -1;
-	}
-	/* can't have both -m and --socket-mem */
-	if (args.memory_size != NULL && args.numa_mem != NULL) {
-		EAL_LOG(ERR, "Options -m and --numa-mem can't be used at the same time");
-		return -1;
-	}
-	/* can't use both no-huge and socket-mem */
-	if (args.no_huge && args.numa_mem) {
-		EAL_LOG(ERR, "Options --no-huge and --numa-mem can't be used at the same time");
-		return -1;
-	}
-	/* can't use no-huge and huge-worker-stack */
-	if (args.huge_worker_stack != NULL && args.no_huge) {
-		EAL_LOG(ERR, "Options --no-huge and --huge-worker-stack can't be used at the same time");
-		return -1;
-	}
-	/* can't use socket-limit and legacy-mem */
-	if (args.numa_limit != NULL && args.legacy_mem) {
-		EAL_LOG(ERR, "Options --numa-limit and --legacy-mem can't be used at the same time");
-		return -1;
-	}
-	/* can't use legacy-mem and in-memory */
-	if (args.legacy_mem && args.in_memory) {
-		EAL_LOG(ERR, "Options --legacy-mem and --in-memory can't be used at the same time");
-		return -1;
-	}
-	/* can't use legacy-mem and match-allocations */
-	if (args.legacy_mem && args.match_allocations) {
-		EAL_LOG(ERR, "Options --legacy-mem and --match-allocations can't be used at the same time");
-		return -1;
-	}
-	/* can't use no-huge and match-allocations */
-	if (args.no_huge && args.match_allocations) {
-		EAL_LOG(ERR, "Options --no-huge and --match-allocations can't be used at the same time");
-		return -1;
-	}
-	/* can't use no-huge and huge-unlink */
-	if (args.no_huge && args.huge_unlink) {
-		EAL_LOG(ERR, "Options --no-huge and --huge-unlink can't be used at the same time");
-		return -1;
-	}
-	/* can't use single-file-segments and huge-unlink */
-	if (args.single_file_segments && args.huge_unlink) {
-		EAL_LOG(ERR, "Options --single-file-segments and --huge-unlink can't be used at the same time");
-		return -1;
-	}
-	/* can't use in-memory and huge-unlink */
-	if (args.in_memory && args.huge_unlink) {
-		EAL_LOG(ERR, "Options --in-memory and --huge-unlink can't be used at the same time");
-		return -1;
-	}
 
 	/* print version before anything else */
 	/* since message is explicitly requested by user, we write message

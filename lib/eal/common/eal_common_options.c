@@ -279,6 +279,8 @@ rte_set_application_usage_hook(rte_usage_hook_t usage_func)
 
 int
 eal_save_args(__rte_unused int argc, __rte_unused char **argv) { return 0; }
+void
+eal_clean_saved_args(void) { /* no-op */ }
 
 #else /* RTE_EXEC_ENV_WINDOWS */
 static char **eal_args;
@@ -308,6 +310,28 @@ handle_eal_info_request(const char *cmd, const char *params __rte_unused,
 	for ( ; args[i] != NULL; i++)
 		used = rte_tel_data_add_array_string(d, args[i]);
 	return used;
+}
+
+void
+eal_clean_saved_args(void)
+{
+	int i;
+
+	if (eal_args == NULL)
+		return;
+
+	if (eal_app_args != NULL) {
+		i = 0;
+		while (eal_app_args[i] != NULL)
+			free(eal_app_args[i++]);
+		free(eal_app_args);
+		eal_app_args = NULL;
+	}
+	i = 0;
+	while (eal_args[i] != NULL)
+		free(eal_args[i++]);
+	free(eal_args);
+	eal_args = NULL;
 }
 
 int
@@ -354,18 +378,7 @@ eal_save_args(int argc, char **argv)
 	return 0;
 
 error:
-	if (eal_app_args != NULL) {
-		i = 0;
-		while (eal_app_args[i] != NULL)
-			free(eal_app_args[i++]);
-		free(eal_app_args);
-		eal_app_args = NULL;
-	}
-	i = 0;
-	while (eal_args[i] != NULL)
-		free(eal_args[i++]);
-	free(eal_args);
-	eal_args = NULL;
+	eal_clean_saved_args();
 	return -1;
 }
 #endif /* !RTE_EXEC_ENV_WINDOWS */

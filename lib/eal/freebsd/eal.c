@@ -416,6 +416,7 @@ rte_eal_init(int argc, char **argv)
 	struct internal_config *internal_conf =
 		eal_get_internal_configuration();
 	bool has_phys_addr;
+	char **env_argv = NULL;
 	enum rte_iova_mode iova_mode;
 
 	/* first check if we have been run before */
@@ -426,15 +427,31 @@ rte_eal_init(int argc, char **argv)
 		return -1;
 	}
 
-	/* Save and collate args at the top */
-	eal_save_args(argc, argv);
+	/* parse any initial EAL args from environment variable */
+	int env_argc = eal_parse_env_args(&env_argv, argv[0]);
+	if (env_argc < 0)
+		rte_eal_init_alert("Error processing environment args, ignoring " EAL_ENV_ARGS_VAR);
 
+	/* Save and collate args at the top */
+	eal_save_args(argc, argv, env_argc, env_argv);
+
+	/* first process any environment variable args */
+	ret = eal_collate_args(env_argc, env_argv);
+	if (ret < 0) {
+		rte_eal_init_alert("Invalid arguments read from environment var " EAL_ENV_ARGS_VAR);
+		rte_errno = EINVAL;
+		goto err_out;
+	}
+
+	/* then process cmdline args, which can override env */
 	fctret = eal_collate_args(argc, argv);
 	if (fctret < 0) {
 		rte_eal_init_alert("invalid command-line arguments.");
 		rte_errno = EINVAL;
 		goto err_out;
 	}
+	/* eal_init places argv in place of last arg, in case there are app args */
+	argv[fctret] = argv[0];
 
 	/* setup log as early as possible */
 	if (eal_parse_log_options() < 0) {
@@ -750,10 +767,20 @@ rte_eal_init(int argc, char **argv)
 
 	eal_mcfg_complete();
 
+	/* clean up temporary environment args */
+	for (i = 0; i < env_argc; i++)
+		free(env_argv[i]);
+	free(env_argv);
+
 	return fctret;
 err_out:
 	rte_atomic_store_explicit(&run_once, 0, rte_memory_order_relaxed);
 	eal_clean_saved_args();
+
+	/* clean up temporary environment args */
+	for (i = 0; i < env_argc; i++)
+		free(env_argv[i]);
+	free(env_argv);
 	return -1;
 }
 

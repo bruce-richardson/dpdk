@@ -17,6 +17,8 @@
 
 #include "eal_internal_cfg.h"
 
+#define EAL_ENV_ARGS_VAR "DPDK_EAL_DEFAULT_ARGS"
+
 /**
  * Structure storing internal configuration (per-lcore)
  */

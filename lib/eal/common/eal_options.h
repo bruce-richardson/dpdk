@@ -16,8 +16,9 @@ int eal_adjust_config(struct internal_config *internal_cfg);
 int eal_cleanup_config(struct internal_config *internal_cfg);
 enum rte_proc_type_t eal_proc_type_detect(void);
 int eal_plugins_init(void);
-int eal_save_args(int argc, char **argv);
+int eal_save_args(int argc, char **argv, int env_argc, char **env_argv);
 void eal_clean_saved_args(void);
+int eal_parse_env_args(char ***argv_out, const char *argv0);
 int handle_eal_info_request(const char *cmd, const char *params __rte_unused,
 		struct rte_tel_data *d);
 

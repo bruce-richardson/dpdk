@@ -252,7 +252,7 @@ int
 eal_collate_args(int argc, char **argv)
 {
 	if (argc < 1 || argv == NULL)
-		return -EINVAL;
+		return 0;
 
 	/* parse the arguments */
 	eal_argparse.prog_name = argv[0];

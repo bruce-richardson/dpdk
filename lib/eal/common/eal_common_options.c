@@ -74,9 +74,19 @@ struct eal_init_args {
 
 #define INCLUDE_ALL_ARG 1  /* for struct definition, include even unsupported values */
 #include "eal_option_list.h"
-#undef INCLUDE_ALL_ARG
 };
-struct eal_init_args args;
+
+/* define the structure itself, with initializers. Only the LIST_ARGS need init */
+#define LIST_ARG(long, short, help_str, fieldname) .fieldname = TAILQ_HEAD_INITIALIZER(args.fieldname),
+#define STR_ARG(long, short, help_str, fieldname)
+#define OPT_STR_ARG(long, short, help_str, fieldname)
+#define BOOL_ARG(long, short, help_str, fieldname)
+#define STR_ALIAS(long, short, help_str, fieldname)
+
+struct eal_init_args args = {
+	#include "eal_option_list.h"
+};
+#undef INCLUDE_ALL_ARG
 
 /* an rte_argparse callback to append the argument to an arg_list
  * in args. The index is the offset into the struct of the list.
@@ -108,13 +118,6 @@ eal_usage(const struct rte_argparse *obj)
 	if (rte_application_usage_hook != NULL)
 		rte_application_usage_hook(obj->prog_name);
 }
-
-/* undef the *_ARG macros before redefining to generate the argparse arg list */
-#undef LIST_ARG
-#undef STR_ARG
-#undef OPT_STR_ARG
-#undef BOOL_ARG
-#undef STR_ALIAS
 
 /* For arguments which have an arg_list type, they use callback (no val_saver),
  * require a value, and have the SUPPORT_MULTI flag.
@@ -216,15 +219,6 @@ eal_collate_args(int argc, char **argv)
 {
 	if (argc < 1 || argv == NULL || argv[0] == NULL)
 		return -EINVAL;
-
-	/* initialize the list of arguments */
-	memset(&args, 0, sizeof(args));
-	TAILQ_INIT(&args.allow);
-	TAILQ_INIT(&args.block);
-	TAILQ_INIT(&args.driver_path);
-	TAILQ_INIT(&args.log_level);
-	TAILQ_INIT(&args.trace);
-	TAILQ_INIT(&args.vdev);
 
 	/* parse the arguments */
 	eal_argparse.prog_name = argv[0];

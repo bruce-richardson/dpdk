@@ -3,6 +3,8 @@
  */
 
 #include <stdarg.h>
+#include <windows.h>
+#include <libloaderapi.h>  /* for GetModuleFilenameW */
 
 #include <fcntl.h>
 #include <io.h>
@@ -167,9 +169,22 @@ rte_eal_init(int argc, char **argv)
 	int ret;
 	char cpuset[RTE_CPU_AFFINITY_STR_LEN];
 	char thread_name[RTE_THREAD_NAME_SIZE];
+	char module_filename[64];
+
+	if (argv == NULL && argc != 0) {
+		rte_eal_init_alert("Invalid arguments: argv is NULL but argc is not 0");
+		rte_errno = EINVAL;
+		return -1;
+	}
+	if (argc == 0) {
+		/* query the OS for the program name to use */
+		wchar_t mod_filename_w[sizeof(module_filename)];
+		GetModuleFileNameW(NULL, mod_filename_w, sizeof(mod_filename_w));
+		wcstombs(module_filename, mod_filename_w, sizeof(module_filename));
+	}
 
 	/* parse any initial EAL args from environment variable */
-	int env_argc = eal_parse_env_args(&env_argv, argv[0]);
+	int env_argc = eal_parse_env_args(&env_argv, argc > 0 ? argv[0] : module_filename);
 	if (env_argc < 0)
 		rte_eal_init_alert("Error processing environment args, ignoring " EAL_ENV_ARGS_VAR);
 
@@ -192,7 +207,8 @@ rte_eal_init(int argc, char **argv)
 		goto err_out;
 	}
 	/* eal_init places argv in place of last arg, in case there are app args */
-	argv[fctret] = argv[0];
+	if (fctret > 0)
+		argv[fctret] = argv[0];
 
 	/* setup log as early as possible */
 	if (eal_parse_log_options() < 0) {

@@ -563,6 +563,8 @@ out:
 	return ret;
 }
 
+extern const char *__progname;
+
 /* Launch threads, called at application init(). */
 RTE_EXPORT_SYMBOL(rte_eal_init)
 int
@@ -579,6 +581,12 @@ rte_eal_init(int argc, char **argv)
 	struct internal_config *internal_conf =
 		eal_get_internal_configuration();
 
+	if (argv == NULL && argc != 0) {
+		rte_eal_init_alert("Invalid arguments: argv is NULL but argc is not 0");
+		rte_errno = EINVAL;
+		return -1;
+	}
+
 	/* first check if we have been run before */
 	if (!rte_atomic_compare_exchange_strong_explicit(&run_once, &has_run, 1,
 					rte_memory_order_relaxed, rte_memory_order_relaxed)) {
@@ -588,7 +596,7 @@ rte_eal_init(int argc, char **argv)
 	}
 
 	/* parse any initial EAL args from environment variable */
-	int env_argc = eal_parse_env_args(&env_argv, argv[0]);
+	int env_argc = eal_parse_env_args(&env_argv, argc > 0 ? argv[0] : __progname);
 	if (env_argc < 0)
 		rte_eal_init_alert("Error processing environment args, ignoring " EAL_ENV_ARGS_VAR);
 
@@ -611,7 +619,8 @@ rte_eal_init(int argc, char **argv)
 		goto err_out;
 	}
 	/* eal_init places argv in place of last arg, in case there are app args */
-	argv[fctret] = argv[0];
+	if (fctret > 0)
+		argv[fctret] = argv[0];
 
 	/* setup log as early as possible */
 	if (eal_parse_log_options() < 0) {

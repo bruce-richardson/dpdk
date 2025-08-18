@@ -251,7 +251,6 @@ eal_collate_args(int argc, char **argv)
 			CONFLICTING_OPTIONS(args, in_memory, huge_unlink))
 		return -1;
 
-	argv[retval - 1] = argv[0];
 	return retval - 1;
 }
 
@@ -317,7 +316,8 @@ rte_set_application_usage_hook(rte_usage_hook_t usage_func)
 
 #ifdef RTE_EXEC_ENV_WINDOWS
 int
-eal_save_args(__rte_unused int argc, __rte_unused char **argv)
+eal_save_args(__rte_unused int argc, __rte_unused char **argv, __rte_unused int env_argc,
+		__rte_unused char **env_argp)
 {
 	return 0;
 }
@@ -358,7 +358,7 @@ handle_eal_info_request(const char *cmd, const char *params __rte_unused,
 }
 
 int
-eal_save_args(int argc, char **argv)
+eal_save_args(int argc, char **argv, int env_argc, char **env_argv)
 {
 	int i, j;
 
@@ -369,19 +369,31 @@ eal_save_args(int argc, char **argv)
 
 	/* clone argv to report out later. We overprovision, but
 	 * this does not waste huge amounts of memory
+	 * NOTE: no +1 needed for NULL at end, because argv[0] appears twice
 	 */
-	eal_args = calloc(argc + 1, sizeof(*eal_args));
+	eal_args = calloc(env_argc + argc, sizeof(*eal_args));
 	if (eal_args == NULL)
 		return -1;
+
+	for (i = 0; i < env_argc; i++) {
+		eal_args[i] = malloc(strlen(env_argv[i]) + 10); /* allocate extra for "[env]" */
+		if (eal_args[i] == NULL)
+			goto error;
+		sprintf(eal_args[i], "%s%s", env_argv[i], i > 0 ? " [env]" : "");
+	}
+
+	/* we already handled argv[0] from env_argv, so skip it */
+	argv++;
+	argc--;
 
 	for (i = 0; i < argc; i++) {
 		if (strcmp(argv[i], "--") == 0)
 			break;
-		eal_args[i] = strdup(argv[i]);
-		if (eal_args[i] == NULL)
+		eal_args[i + env_argc] = strdup(argv[i]);
+		if (eal_args[i + env_argc] == NULL)
 			goto error;
 	}
-	eal_args[i++] = NULL; /* always finish with NULL */
+	eal_args[env_argc + i++] = NULL; /* always finish with NULL */
 
 	/* allow reporting of any app args we know about too */
 	if (i >= argc)
@@ -2302,6 +2314,56 @@ eal_adjust_config(struct internal_config *internal_cfg)
 		internal_cfg->memory += internal_cfg->numa_mem[i];
 
 	return 0;
+}
+
+/*
+ * Parse the environment variable EAL_ENV_ARGS_VAR and split it into argv array.
+ * Returns the number of arguments (argc), or -1 on error.
+ * argv[0] is set to the program name passed as argv0
+ * The argv array is null-terminated, but the null is not counted in argc.
+ * The returned argv_out, and all strings it points to, must be freed by caller.
+ */
+int
+eal_parse_env_args(char ***argv_out, const char *argv0)
+{
+	const char *env = getenv(EAL_ENV_ARGS_VAR);
+	char *env_copy = NULL, *token = NULL, *saveptr = NULL;
+	char **argv = NULL;
+	int argc = 0, argv_size = 0;
+
+	if (argv_out == NULL)
+		return -1;
+
+	if (env == NULL)
+		env = "";
+
+	env_copy = strdup(env);
+	if (env_copy == NULL)
+		return -1;
+
+	/* Estimate max number of args: count spaces + 1 */
+	for (const char *p = env; *p != '\0'; p++)
+		if (*p == ' ')
+			argv_size++;
+	argv_size += 3; /* program name + at least one arg, plus NULL */
+
+	argv = calloc(argv_size, sizeof(char *));
+	if (argv == NULL) {
+		free(env_copy);
+		return -1;
+	}
+
+	argv[argc++] = strdup(argv0);
+	token = strtok_r(env_copy, " ", &saveptr);
+	while (token) {
+		argv[argc++] = strdup(token);
+		token = strtok_r(NULL, " ", &saveptr);
+	}
+	argv[argc] = NULL;
+
+	*argv_out = argv;
+	free(env_copy);
+	return argc;
 }
 
 RTE_EXPORT_SYMBOL(rte_vect_get_max_simd_bitwidth)

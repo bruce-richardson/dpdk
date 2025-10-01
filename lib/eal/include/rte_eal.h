@@ -503,13 +503,15 @@ rte_eal_get_runtime_dir(void);
  *   A string describing a mask of core ids.
  * @param cores
  *   An array where to store the core ids orders.
- *   This array must be at least RTE_MAX_LCORE large.
+ *   This array must be at least CPU_SETSIZE large.
+ * @param limit_range
+ *   If set, return an error if any cores in the mask are >= RTE_MAX_LCORE.
  * @return
  *   0 on success, -1 if the string content was invalid.
  */
 __rte_internal
 int
-rte_eal_parse_coremask(const char *coremask, int *cores);
+rte_eal_parse_coremask(const char *coremask, int *cores, bool limit_range);
 
 #ifdef __cplusplus
 }

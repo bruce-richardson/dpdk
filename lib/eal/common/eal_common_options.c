@@ -292,8 +292,6 @@ struct device_option {
 static struct device_option_list devopt_list =
 TAILQ_HEAD_INITIALIZER(devopt_list);
 
-static int core_parsed;
-
 /* Returns rte_usage_hook_t */
 rte_usage_hook_t
 eal_get_application_usage_hook(void)
@@ -830,7 +828,7 @@ eal_parse_service_coremask(const char *coremask)
 	if (count == 0)
 		return -1;
 
-	if (core_parsed && taken_lcore_count != count) {
+	if (taken_lcore_count != count) {
 		EAL_LOG(WARNING,
 			"Not all service cores are in the coremask. "
 			"Please ensure -c or -l includes service cores");
@@ -1051,7 +1049,7 @@ eal_parse_service_corelist(const char *corelist)
 	if (count == 0)
 		return -1;
 
-	if (core_parsed && taken_lcore_count != count) {
+	if (taken_lcore_count != count) {
 		EAL_LOG(WARNING,
 			"Not all service cores were in the coremask. "
 			"Please ensure -c or -l includes service cores");
@@ -1919,32 +1917,31 @@ eal_parse_args(void)
 		}
 	}
 
-	/* parse the core list arguments */
-	if (args.coremask != NULL) {
+
+	/* parse the core list arguments
+	 * First handle the special case where we have explicit core mapping/remapping
+	 */
+	if (args.lcores != NULL && !remap_lcores) {
+		if (eal_parse_lcores(args.lcores) < 0) {
+			EAL_LOG(ERR, "invalid lcore list: '%s'", args.lcores);
+			return -1;
+		}
+	} else {
+		/* otherwise get a cpuset of the cores to be used and then handle that
+		 * taking mappings into account. Cpuset comes from either:
+		 * 1. coremask parameter
+		 * 2. core list parameter
+		 * 3. autodetecting current thread affinities
+		 */
 		rte_cpuset_t cpuset;
-
-		if (rte_eal_parse_coremask(args.coremask, &cpuset, !remap_lcores) < 0) {
-			EAL_LOG(ERR, "invalid coremask syntax");
-			return -1;
-		}
-		if (update_lcore_config(&cpuset, remap_lcores, lcore_id_base) < 0) {
-			char *available = available_cores();
-
-			EAL_LOG(ERR, "invalid coremask '%s', please check specified cores are part of %s",
-					args.coremask, available);
-			free(available);
-			return -1;
-		}
-		core_parsed = 1;
-	} else if (args.lcores != NULL) {
-		if (!remap_lcores) {
-			if (eal_parse_lcores(args.lcores) < 0) {
-				EAL_LOG(ERR, "invalid lcore list: '%s'", args.lcores);
+		const char *cpuset_source;
+		if (args.coremask != NULL) {
+			if (rte_eal_parse_coremask(args.coremask, &cpuset, !remap_lcores) < 0) {
+				EAL_LOG(ERR, "invalid coremask syntax");
 				return -1;
 			}
-		} else {
-			rte_cpuset_t cpuset;
-
+			cpuset_source = "coremask";
+		} else if (args.lcores != NULL) {
 			if (strchr(args.lcores, '@') != NULL || strchr(args.lcores, '(') != NULL) {
 				EAL_LOG(ERR, "cannot use '@' or core groupings '()' in lcore list when remapping lcores");
 				return -1;
@@ -1954,18 +1951,29 @@ eal_parse_args(void)
 				EAL_LOG(ERR, "Error parsing lcore list: '%s'", args.lcores);
 				return -1;
 			}
-
-			if (update_lcore_config(&cpuset, remap_lcores, lcore_id_base) < 0) {
-				char *available = available_cores();
-
-				EAL_LOG(ERR, "invalid coremask '%s', please check specified cores are part of %s",
-						args.coremask, available);
-				free(available);
+			cpuset_source = "core list";
+		} else {
+			if (rte_thread_get_affinity_by_id(rte_thread_self(), &cpuset) != 0) {
+				EAL_LOG(ERR, "Error querying current process thread affinities");
 				return -1;
 			}
+			cpuset_source = "affinity auto-detection";
 		}
-		core_parsed = 1;
+		char *cpuset_str = eal_cpuset_to_str(&cpuset);
+		if (cpuset_str != NULL) {
+			EAL_LOG(DEBUG, "Cores selected by %s: %s", cpuset_source, cpuset_str);
+			free(cpuset_str);
+		}
+		if (update_lcore_config(&cpuset, remap_lcores, lcore_id_base) < 0) {
+			char *available = available_cores();
+
+			EAL_LOG(ERR, "invalid coremask or core-list parameter, please check specified cores are part of %s",
+					available);
+			free(available);
+			return -1;
+		}
 	}
+
 	/* service core options */
 	if (args.service_coremask != NULL) {
 		if (eal_parse_service_coremask(args.service_coremask) < 0) {
@@ -2209,27 +2217,6 @@ eal_parse_args(void)
 }
 
 static void
-eal_auto_detect_cores(struct rte_config *cfg)
-{
-	unsigned int lcore_id;
-	unsigned int removed = 0;
-	rte_cpuset_t affinity_set;
-
-	if (rte_thread_get_affinity_by_id(rte_thread_self(), &affinity_set) != 0)
-		CPU_ZERO(&affinity_set);
-
-	for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++) {
-		if (cfg->lcore_role[lcore_id] == ROLE_RTE &&
-		    !CPU_ISSET(lcore_id, &affinity_set)) {
-			cfg->lcore_role[lcore_id] = ROLE_OFF;
-			removed++;
-		}
-	}
-
-	cfg->lcore_count -= removed;
-}
-
-static void
 compute_ctrl_threads_cpuset(struct internal_config *internal_cfg)
 {
 	rte_cpuset_t *cpuset = &internal_cfg->ctrl_cpuset;
@@ -2276,20 +2263,9 @@ int
 eal_adjust_config(struct internal_config *internal_cfg)
 {
 	int i;
-	struct rte_config *cfg = rte_eal_get_configuration();
-	struct internal_config *internal_conf =
-		eal_get_internal_configuration();
 
-	if (!core_parsed)
-		eal_auto_detect_cores(cfg);
-
-	if (cfg->lcore_count == 0) {
-		EAL_LOG(ERR, "No detected lcore is enabled, please check the core list");
-		return -1;
-	}
-
-	if (internal_conf->process_type == RTE_PROC_AUTO)
-		internal_conf->process_type = eal_proc_type_detect();
+	if (internal_cfg->process_type == RTE_PROC_AUTO)
+		internal_cfg->process_type = eal_proc_type_detect();
 
 	compute_ctrl_threads_cpuset(internal_cfg);
 

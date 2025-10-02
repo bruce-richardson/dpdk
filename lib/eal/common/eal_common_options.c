@@ -842,7 +842,7 @@ eal_parse_service_coremask(const char *coremask)
 }
 
 static int
-update_lcore_config(int *cores, bool remap, uint16_t remap_base)
+update_lcore_config(const rte_cpuset_t *cpuset, bool remap, uint16_t remap_base)
 {
 	struct rte_config *cfg = rte_eal_get_configuration();
 	unsigned int count = 0;
@@ -856,9 +856,9 @@ update_lcore_config(int *cores, bool remap, uint16_t remap_base)
 		lcore_config[i].core_index = -1;
 	}
 
-	/* now go through the core mask */
+	/* now go through the cpuset */
 	for (i = 0; i < CPU_SETSIZE; i++) {
-		if (cores[i] != -1) {
+		if (CPU_ISSET(i, cpuset)) {
 			if (eal_cpu_detected(i) == 0) {
 				EAL_LOG(ERR, "lcore %u unavailable", i);
 				ret = -1;
@@ -867,7 +867,7 @@ update_lcore_config(int *cores, bool remap, uint16_t remap_base)
 			if (!remap)
 				lcore_id = i;
 			cfg->lcore_role[lcore_id] = ROLE_RTE;
-			lcore_config[lcore_id].core_index = cores[i];
+			lcore_config[lcore_id].core_index = count;
 			CPU_ZERO(&lcore_config[lcore_id].cpuset);
 			CPU_SET(i, &lcore_config[lcore_id].cpuset);
 			EAL_LOG(DEBUG, "lcore %u mapped to physical core %u", lcore_id, i);
@@ -920,7 +920,7 @@ check_core_list(int *lcores, unsigned int count)
 
 RTE_EXPORT_INTERNAL_SYMBOL(rte_eal_parse_coremask)
 int
-rte_eal_parse_coremask(const char *coremask, int *cores, bool limit_range)
+rte_eal_parse_coremask(const char *coremask, rte_cpuset_t *cpuset, bool limit_range)
 {
 	const char *coremask_orig = coremask;
 	int lcores[CPU_SETSIZE];
@@ -929,8 +929,7 @@ rte_eal_parse_coremask(const char *coremask, int *cores, bool limit_range)
 	int val;
 	char c;
 
-	for (idx = 0; idx < CPU_SETSIZE; idx++)
-		cores[idx] = -1;
+	CPU_ZERO(cpuset);
 	idx = 0;
 
 	EAL_LOG(WARNING, "'-c <coremask>' option is deprecated, and will be removed in a future release");
@@ -976,6 +975,7 @@ rte_eal_parse_coremask(const char *coremask, int *cores, bool limit_range)
 					return -1;
 				}
 				lcores[count++] = idx;
+				CPU_SET(idx, cpuset);
 			}
 		}
 	}
@@ -988,16 +988,6 @@ rte_eal_parse_coremask(const char *coremask, int *cores, bool limit_range)
 	/* if we are asked to, we need to check that cores < RTE_MAX_LCORE */
 	if (limit_range && check_core_list(lcores, count) != 0)
 		return -1;
-
-	/*
-	 * Now that we've got a list of cores no longer than RTE_MAX_LCORE,
-	 * and no lcore in that list is greater than RTE_MAX_LCORE, populate
-	 * the cores array.
-	 */
-	do {
-		count--;
-		cores[lcores[count]] = count;
-	} while (count != 0);
 
 	return 0;
 }
@@ -1932,13 +1922,13 @@ eal_parse_args(void)
 
 	/* parse the core list arguments */
 	if (args.coremask != NULL) {
-		int lcore_indexes[CPU_SETSIZE];
+		rte_cpuset_t cpuset;
 
-		if (rte_eal_parse_coremask(args.coremask, lcore_indexes, !remap_lcores) < 0) {
+		if (rte_eal_parse_coremask(args.coremask, &cpuset, !remap_lcores) < 0) {
 			EAL_LOG(ERR, "invalid coremask syntax");
 			return -1;
 		}
-		if (update_lcore_config(lcore_indexes, remap_lcores, lcore_id_base) < 0) {
+		if (update_lcore_config(&cpuset, remap_lcores, lcore_id_base) < 0) {
 			char *available = available_cores();
 
 			EAL_LOG(ERR, "invalid coremask '%s', please check specified cores are part of %s",

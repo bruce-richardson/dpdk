@@ -85,6 +85,12 @@ def create_telemetry_process(telemetry_script, args_list):
             text=True,
             bufsize=1,  # Line buffered
         )
+
+        # Get and display the connected application name
+        if not print_connected_app(process):
+            return None
+        process.script = telemetry_script  # Store script path for reference
+        process.args = args_list  # Store args for reference
         return process
     except FileNotFoundError:
         print("Error: Python interpreter or script not found", file=sys.stderr)
@@ -102,15 +108,32 @@ def query_telemetry(process, command):
         command: The telemetry command to send (e.g., "/info" or "/ethdev/stats,0")
 
     Returns:
-        dict: The parsed JSON response with the command wrapper stripped,
+        (process, dict): The process handle, in case of reconnection, and the
+              parsed JSON response with the command wrapper stripped,
               or None if there was an error
     """
+    # Handle case where process is None
+    if process is None:
+        return (None, None)
+
     # Send the command
     process.stdin.write(f"{command}\n")
     process.stdin.flush()
 
-    # Read the JSON response
+    # Read the JSON response, reconnecting if necessary
     response = process.stdout.readline()
+    while not response:
+        script = process.script
+        args_list = process.args
+        process = None
+        print("Application disconnected, retrying...", file=sys.stderr)
+        while not process:
+            time.sleep(1)
+            process = create_telemetry_process(script, args_list)
+        process.stdin.write(f"{command}\n")
+        process.stdin.flush()
+        response = process.stdout.readline()
+
     try:
         data = json.loads(response)
         # When run non-interactively, the response is wrapped with the command
@@ -119,11 +142,11 @@ def query_telemetry(process, command):
         # The response should have exactly one key which is the command
         if len(data) == 1:
             # Extract the value, ignoring the key
-            return next(iter(data.values()))
+            return (process, next(iter(data.values())))
         else:
-            return data
+            return (process, data)
     except (json.JSONDecodeError, KeyError):
-        return None
+        return (None, None)
 
 
 def print_connected_app(process):
@@ -132,11 +155,12 @@ def print_connected_app(process):
     Args:
         process: The subprocess.Popen handle to the telemetry process
     """
-    info = query_telemetry(process, "/info")
+    process, info = query_telemetry(process, "/info")
     if info and "pid" in info:
         app_name = get_app_name(info["pid"])
         if app_name:
             print(f'Connected to application: "{app_name}"')
+    return process
 
 
 def expand_shortcuts(process, stat_specs):
@@ -169,7 +193,7 @@ def expand_shortcuts(process, stat_specs):
         field = field_map.get(field, field)
 
         # Get list of ethernet devices
-        port_list = query_telemetry(process, "/ethdev/list")
+        process, port_list = query_telemetry(process, "/ethdev/list")
         if not isinstance(port_list, list):
             print("Error: Failed to get ethernet device list", file=sys.stderr)
             return None
@@ -216,7 +240,7 @@ def validate_stats(process, stat_specs):
             return None, None
 
         # Query the stat once to validate it exists and is numeric
-        data = query_telemetry(process, command)
+        process, data = query_telemetry(process, command)
         if not isinstance(data, dict):
             print(f"Error: Command '{command}' did not return a dictionary", file=sys.stderr)
             return None, None
@@ -276,7 +300,9 @@ def monitor_stats(process, args):
             current_values = []
             total = 0
             for i, (spec, command, field) in enumerate(parsed_specs):
-                data = query_telemetry(process, command)
+                process, data = query_telemetry(process, command)
+                if not data:
+                    continue
                 current_value = data[field]
                 current_values.append(current_value)
 
@@ -387,9 +413,11 @@ def main():
 
     # Run dpdk-telemetry.py with pipes for stdin and stdout
     process = create_telemetry_process(telemetry_script, args_list)
-
-    # Get and display the connected application name
-    print_connected_app(process)
+    if not process:
+        print("Waiting for connection to DPDK application...", file=sys.stderr)
+        while not process:
+            time.sleep(1)
+            process = create_telemetry_process(telemetry_script, args_list)
 
     # Monitor the requested statistics
     monitor_stats(process, args)

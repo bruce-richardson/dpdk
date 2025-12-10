@@ -55,6 +55,13 @@ New Features
      Also, make sure to start the actual text at the margin.
      =======================================================
 
+* **Added Script for Real-time Telemetry Monitoring.**
+
+  Introduced the `dpdk-telemetry-watcher.py` script, enabling users to monitor
+  real-time telemetry statistics from running DPDK applications.
+  The tool supports customizable display options, including delta values,
+  total statistics, and single-line output for compact monitoring.
+
 * **Updated AMD axgbe ethernet driver.**
 
   * Added support for V4000 Krackan2e.

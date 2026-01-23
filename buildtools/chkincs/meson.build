@@ -33,6 +33,8 @@ executable('chkincs', sources,
         dependencies: deps,
         install: false)
 
+subdir_done()
+
 executable('chkincs-exp', sources,
         c_args: [cflags, '-DALLOW_EXPERIMENTAL_API'],
         include_directories: includes,

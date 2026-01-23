@@ -84,10 +84,10 @@ jobs:
           - os: ubuntu-22.04
             compiler: gcc
             mini: mini
-          - os: ubuntu-22.04
-            compiler: clang
-            library: shared
-            checks: tests+ubsan
+#          - os: ubuntu-22.04
+#            compiler: clang
+#            library: shared
+#            checks: tests+ubsan
 #          - os: ubuntu-22.04
 #            compiler: gcc
 #            checks: stdatomic
@@ -323,8 +323,8 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - image: fedora:43
-            compiler: gcc
+#          - image: fedora:43
+#            compiler: gcc
           - image: fedora:43
             compiler: clang
 

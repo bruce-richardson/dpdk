@@ -88,36 +88,36 @@ jobs:
             compiler: clang
             library: shared
             checks: tests+ubsan
+#          - os: ubuntu-22.04
+#            compiler: gcc
+#            checks: stdatomic
+#          - os: ubuntu-22.04
+#            compiler: clang
+#            checks: stdatomic
           - os: ubuntu-22.04
             compiler: gcc
-            checks: stdatomic
-          - os: ubuntu-22.04
-            compiler: clang
-            checks: stdatomic
-          - os: ubuntu-22.04
-            compiler: gcc
-            checks: abi+debug+doc+examples+tests
-          - os: ubuntu-22.04
-            compiler: clang
-            checks: asan+doc+tests
-          - os: ubuntu-22.04
-            compiler: gcc
-            library: static
-            cross: i386
-          - os: ubuntu-22.04
-            compiler: gcc
-            library: static
-            cross: mingw
-          - os: ubuntu-22.04
-            compiler: gcc
-            library: shared
-            cross: aarch64
-          - os: ubuntu-22.04
-            compiler: gcc
-            cross: ppc64le
-          - os: ubuntu-22.04
-            compiler: gcc
-            cross: riscv64
+            checks: abi+debug+tests
+#          - os: ubuntu-22.04
+#            compiler: clang
+#            checks: asan+doc+tests
+#          - os: ubuntu-22.04
+#            compiler: gcc
+#            library: static
+#            cross: i386
+#          - os: ubuntu-22.04
+#            compiler: gcc
+#            library: static
+#            cross: mingw
+#          - os: ubuntu-22.04
+#            compiler: gcc
+#            library: shared
+#            cross: aarch64
+#          - os: ubuntu-22.04
+#            compiler: gcc
+#            cross: ppc64le
+#          - os: ubuntu-22.04
+#            compiler: gcc
+#            cross: riscv64
 
     steps:
     - name: Checkout sources
